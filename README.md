@@ -31,12 +31,6 @@ Automata is built to provide that foundation.
 - Configure multiple LLM providers and tools
 - Keep all components running locally in one container for pilots and demos
 
-## Community Edition and Enterprise Edition
-
-Community Edition (source-available) is for local/self-hosted collaboration and core orchestration features.
-
-Enterprise Edition adds commercial capabilities like advanced identity, policy controls, and enterprise support.
-
 ## Quick Start (Non-Engineer Friendly)
 
 The easiest path is the all-in-one container setup.
