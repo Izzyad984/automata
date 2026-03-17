@@ -1,108 +1,54 @@
-<Layouts.flash_group flash={@flash} />
-
-<section class="mx-auto max-w-6xl px-6 py-10">
-  <div class="rounded-box border border-base-300 bg-base-200 p-6">
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <p class="text-sm uppercase tracking-[0.2em] text-base-content/70">
-          SentientWave Automata
-        </p>
-        <h1 class="mt-2 text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-        <p class="mt-3 text-base text-base-content/80">
-          Multi-page admin console for operations, onboarding, LLM providers, and tool integrations.
-        </p>
-      </div>
-      <form action={~p"/logout"} method="post">
-        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
-        <input type="hidden" name="_method" value="delete" />
-        <button type="submit" class="btn btn-outline btn-sm">Sign Out</button>
-      </form>
-    </div>
-
-    <div class="mt-5 flex flex-wrap gap-2 text-sm">
-      <span class="badge badge-outline">Company: {@status.company_name}</span>
-      <span class="badge badge-outline">Group: {@status.group_name}</span>
-      <span class="badge badge-outline">Admin: {@admin_user}</span>
-    </div>
-
-    <nav class="mt-5 flex flex-wrap gap-2">
-      <%= for item <- @nav do %>
-        <a
-          href={item.href}
-          class={["btn btn-sm", if(item.active, do: "btn-primary", else: "btn-ghost")]}
-        >
-          {item.label}
-        </a>
-      <% end %>
-    </nav>
-  </div>
-
-  <div class="mt-6 grid gap-4 md:grid-cols-3">
-    <article class="rounded-box border border-base-300 bg-base-100 p-5">
-      <h2 class="text-base font-semibold">Automata</h2>
-      <p class="mt-2 text-sm text-base-content/70">{@status.services.automata}</p>
-      <a
-        class="link link-primary mt-3 inline-block text-sm"
-        href={@status.automata_url}
-        target="_blank"
-        rel="noreferrer"
-      >
+<.admin_shell
+  flash={@flash}
+  title="Admin Dashboard"
+  subtitle="Operate Automata, Matrix, and Temporal from a single internal console."
+  status={@status}
+  admin_user={@admin_user}
+  nav={@nav}
+>
+  <section class="sw-grid sw-grid-3">
+    <article class="sw-card">
+      <h2 class="sw-card-title">Automata API</h2>
+      <p class="sw-card-copy">Core orchestration service health and entrypoint.</p>
+      <a href={@status.automata_url} target="_blank" rel="noreferrer" class="sw-link">
         {@status.automata_url}
       </a>
     </article>
-    <article class="rounded-box border border-base-300 bg-base-100 p-5">
-      <h2 class="text-base font-semibold">Matrix</h2>
-      <p class="mt-2 text-sm text-base-content/70">{@status.services.matrix}</p>
-      <a
-        class="link link-primary mt-3 inline-block text-sm"
-        href={@status.matrix_url}
-        target="_blank"
-        rel="noreferrer"
-      >
+
+    <article class="sw-card">
+      <h2 class="sw-card-title">Matrix Homeserver</h2>
+      <p class="sw-card-copy">Room messaging surface for humans and agents.</p>
+      <a href={@status.matrix_url} target="_blank" rel="noreferrer" class="sw-link">
         {@status.matrix_url}
       </a>
     </article>
-    <article class="rounded-box border border-base-300 bg-base-100 p-5">
-      <h2 class="text-base font-semibold">Temporal UI</h2>
-      <p class="mt-2 text-sm text-base-content/70">{@status.services.temporal_ui}</p>
-      <a
-        class="link link-primary mt-3 inline-block text-sm"
-        href={@status.temporal_ui_url}
-        target="_blank"
-        rel="noreferrer"
-      >
+
+    <article class="sw-card">
+      <h2 class="sw-card-title">Temporal UI</h2>
+      <p class="sw-card-copy">Durable workflow runtime observability and inspection.</p>
+      <a href={@status.temporal_ui_url} target="_blank" rel="noreferrer" class="sw-link">
         {@status.temporal_ui_url}
       </a>
     </article>
-  </div>
+  </section>
 
-  <div class="mt-6 grid gap-4 md:grid-cols-2">
-    <a
-      href={~p"/onboarding"}
-      class="rounded-box border border-base-300 bg-base-100 p-5 transition hover:border-primary"
-    >
-      <h3 class="text-lg font-semibold">Onboarding</h3>
-      <p class="mt-2 text-sm text-base-content/70">
-        Generate user launch kits, QR links, and provisioning payload validation.
-      </p>
+  <section class="sw-grid sw-grid-2">
+    <a href={~p"/onboarding"} class="sw-action-card">
+      <h3>Onboarding Studio</h3>
+      <p>Create launch kits with deep links, QR codes, and setup instructions for each user.</p>
+      <span>Open onboarding</span>
     </a>
-    <a
-      href={~p"/settings/llm"}
-      class="rounded-box border border-base-300 bg-base-100 p-5 transition hover:border-primary"
-    >
-      <h3 class="text-lg font-semibold">LLM Providers</h3>
-      <p class="mt-2 text-sm text-base-content/70">
-        Manage provider, model, base URL, and credentials used by Automata inference.
-      </p>
+
+    <a href={~p"/settings/llm"} class="sw-action-card">
+      <h3>LLM Providers</h3>
+      <p>Manage multiple providers, set defaults, and adjust model timeout and credentials.</p>
+      <span>Configure providers</span>
     </a>
-    <a
-      href={~p"/settings/tools"}
-      class="rounded-box border border-base-300 bg-base-100 p-5 transition hover:border-primary"
-    >
-      <h3 class="text-lg font-semibold">Tools</h3>
-      <p class="mt-2 text-sm text-base-content/70">
-        Configure Brave internet search and credentials for tool-calling agents.
-      </p>
+
+    <a href={~p"/settings/tools"} class="sw-action-card">
+      <h3>Tool Registry</h3>
+      <p>Enable and maintain tools agents can call, including Brave search and system tools.</p>
+      <span>Manage tools</span>
     </a>
-  </div>
-</section>
+  </section>
+</.admin_shell>
