@@ -1,3 +1,5 @@
+![SentientWave Automata](images/automata_element.png)
+
 # SentientWave Automata
 
 SentientWave Automata helps people and AI agents work together in shared chat rooms.
