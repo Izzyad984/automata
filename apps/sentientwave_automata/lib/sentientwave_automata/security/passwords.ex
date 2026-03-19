@@ -1,7 +1,7 @@
 defmodule SentientwaveAutomata.Security.Passwords do
   @moduledoc false
 
-  @charset ~c"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+"
+  @charset ~c"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789!@#$%^&*()-_=+"
 
   @spec generate(pos_integer()) :: String.t()
   def generate(length \\ 20) when is_integer(length) and length > 0 do
