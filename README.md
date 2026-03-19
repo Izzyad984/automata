@@ -4,6 +4,14 @@ SentientWave Automata helps people and AI agents work together in shared chat ro
 
 ![SentientWave Automata](images/automata_element.png)
 
+## Admin UI
+
+The built-in admin UI gives administrators one place to onboard users, configure providers and tools, inspect traces, and manage agent behavior.
+
+![Automata Admin UI Overview](images/admin_ui_01.png)
+
+![Automata Admin UI Skill Catalog](images/admin_ui_02.png)
+
 ## The Big Idea
 
 Every community and organization needs a collaborative multi-agentic nervous system.
