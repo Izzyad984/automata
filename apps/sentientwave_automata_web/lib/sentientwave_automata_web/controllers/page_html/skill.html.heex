@@ -1,0 +1,222 @@
+<.admin_shell
+  flash={@flash}
+  title={"Skill: #{@skill.name}"}
+  subtitle="Edit markdown, inspect parsed details, and manage rollout or rollback across agents."
+  status={@status}
+  admin_user={@admin_user}
+  nav={@nav}
+>
+  <section class="sw-card">
+    <div class="sw-inline-actions">
+      <a href={~p"/settings/skills"} class="sw-btn sw-btn-ghost">Back to skill catalog</a>
+    </div>
+
+    <div class="sw-pill-list mt-4">
+      <span class="sw-pill">Slug: {@skill.slug}</span>
+      <span class={["sw-pill", @skill.enabled && "is-ok"]}>
+        {if @skill.enabled, do: "Enabled", else: "Disabled"}
+      </span>
+      <span class="sw-pill">
+        Active assignments: {Enum.count(@designations, &(&1.status == :active))}
+      </span>
+      <span class="sw-pill">History entries: {length(@designations)}</span>
+    </div>
+  </section>
+
+  <section class="sw-grid sw-grid-2">
+    <article class="sw-card">
+      <h2 class="sw-card-title">Skill Configuration</h2>
+      <form action={~p"/settings/skills/#{@skill.id}"} method="post" class="sw-form-grid mt-5">
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+
+        <label class="sw-field">
+          <span>Display Name</span>
+          <input name="skill[name]" class="sw-input" value={@skill.name} />
+        </label>
+
+        <label class="sw-field">
+          <span>Slug</span>
+          <input name="skill[slug]" class="sw-input" value={@skill.slug} />
+        </label>
+
+        <label class="sw-field sw-field-span">
+          <span>Summary</span>
+          <input
+            name="skill[summary]"
+            class="sw-input"
+            value={Map.get(@skill.metadata, "summary", "")}
+          />
+        </label>
+
+        <label class="sw-field sw-field-span">
+          <span>Tags</span>
+          <input
+            name="skill[tags]"
+            class="sw-input"
+            value={Enum.join(skill_tags(@skill), ", ")}
+          />
+        </label>
+
+        <label class="sw-checkbox-row">
+          <input type="checkbox" name="skill[enabled]" value="1" checked={@skill.enabled} />
+          <span>Enabled</span>
+        </label>
+
+        <label class="sw-field sw-field-span">
+          <span>Markdown</span>
+          <textarea name="skill[markdown_body]" class="sw-textarea" rows="20"><%= @skill.markdown_body %></textarea>
+        </label>
+
+        <div class="sw-field-span sw-actions">
+          <button type="submit" class="sw-btn sw-btn-primary">Save Skill</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="sw-card">
+      <h2 class="sw-card-title">Parsed Preview</h2>
+      <p class="sw-card-copy mt-4">{skill_summary(@skill)}</p>
+
+      <div class="sw-detail-stack mt-5">
+        <div>
+          <p class="sw-section-label">Parsed Name</p>
+          <p class="sw-detail-value">{Map.get(@skill.metadata, "parsed_name", @skill.name)}</p>
+        </div>
+
+        <div>
+          <p class="sw-section-label">Tags</p>
+          <div class="sw-pill-list">
+            <span :for={tag <- skill_tags(@skill)} class="sw-pill">{tag}</span>
+            <span :if={skill_tags(@skill) == []} class="sw-pill">No tags</span>
+          </div>
+        </div>
+
+        <div>
+          <p class="sw-section-label">Parsed Tool Hints</p>
+          <div class="sw-pill-list">
+            <span :for={tool <- skill_tools(@skill)} class="sw-pill">{tool}</span>
+            <span :if={skill_tools(@skill) == []} class="sw-pill">No parsed tools</span>
+          </div>
+        </div>
+
+        <div>
+          <p class="sw-section-label">Stored Markdown</p>
+          <pre class="sw-code-block"><code><%= @skill.markdown_body %></code></pre>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="sw-grid sw-grid-2">
+    <article class="sw-card">
+      <div class="sw-section-header">
+        <div>
+          <h2 class="sw-card-title">Designate To Agent</h2>
+          <p class="sw-card-copy">
+            Active agent assignments decide which skills shape agent responses at runtime.
+          </p>
+        </div>
+      </div>
+
+      <div :if={@assignable_agents == []} class="sw-empty mt-5">
+        <h3>No agents available</h3>
+        <p>
+          All active agents already have this skill, or there are no active agents to designate.
+        </p>
+      </div>
+
+      <form
+        :if={@assignable_agents != []}
+        action={~p"/settings/skills/#{@skill.id}/designations"}
+        method="post"
+        class="sw-form-grid mt-5"
+      >
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+
+        <label class="sw-field sw-field-span">
+          <span>Agent</span>
+          <select name="designation[agent_id]" class="sw-select">
+            <option value="">Choose an agent</option>
+            <%= for agent <- @assignable_agents do %>
+              <option value={agent.id}>{agent.display_name} ({agent.slug})</option>
+            <% end %>
+          </select>
+        </label>
+
+        <div class="sw-field-span sw-actions">
+          <button type="submit" class="sw-btn sw-btn-primary">Designate Skill</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="sw-card">
+      <div class="sw-section-header">
+        <div>
+          <h2 class="sw-card-title">Designation History</h2>
+          <p class="sw-card-copy">
+            Rollback preserves history so you can inspect exactly who had a skill and when.
+          </p>
+        </div>
+      </div>
+
+      <div :if={@designations == []} class="sw-empty mt-5">
+        <h3>No designations yet</h3>
+        <p>This skill has not been assigned to any agent yet.</p>
+      </div>
+
+      <div :if={@designations != []} class="sw-table-wrap mt-5">
+        <table class="sw-data-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Status</th>
+              <th>Designated</th>
+              <th>Rolled Back</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={designation <- @designations}>
+              <td>
+                <div class="sw-table-primary">{designation_agent_name(designation)}</div>
+                <div class="sw-table-secondary">
+                  {if designation.agent, do: designation.agent.slug, else: "unknown-agent"}
+                </div>
+              </td>
+              <td>
+                <span class={["sw-pill", designation_status_class(designation.status)]}>
+                  {designation.status}
+                </span>
+              </td>
+              <td>{format_timestamp(designation.designated_at)}</td>
+              <td>{format_timestamp(designation.rolled_back_at)}</td>
+              <td>
+                <div class="sw-table-actions">
+                  <form
+                    :if={designation.status == :active}
+                    action={
+                      ~p"/settings/skills/#{@skill.id}/designations/#{designation.id}/rollback"
+                    }
+                    method="post"
+                  >
+                    <input
+                      type="hidden"
+                      name="_csrf_token"
+                      value={Plug.CSRFProtection.get_csrf_token()}
+                    />
+                    <button type="submit" class="sw-btn sw-btn-danger sw-btn-small">
+                      Roll Back
+                    </button>
+                  </form>
+                  <span :if={designation.status != :active} class="sw-table-secondary">
+                    Historical entry
+                  </span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+</.admin_shell>

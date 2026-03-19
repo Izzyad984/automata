@@ -19,6 +19,7 @@ defmodule SentientwaveAutomataWeb.PageController do
     {"System Directory Admin", "system_directory_admin"},
     {"Run Shell", "run_shell"}
   ]
+  @skill_enabled_options [{"Any status", ""}, {"Enabled", "true"}, {"Disabled", "false"}]
   @trace_status_options [{"Any status", ""}, {"Successful", "ok"}, {"Errored", "error"}]
   @trace_call_kind_options [
     {"Any call type", ""},
@@ -117,6 +118,62 @@ defmodule SentientwaveAutomataWeb.PageController do
 
   def tools(conn, _params) do
     render_tools(conn)
+  end
+
+  def skills(conn, params) do
+    status = Status.summary()
+    {skill_filters, skill_filter_form} = skill_filters_from_params(params)
+    skills = Agents.list_skills(skill_filters)
+    filtered_count = Agents.count_skills(skill_filters)
+    total_count = Agents.count_skills()
+    active_filters = active_skill_filters(skill_filters)
+
+    render(conn, :skills,
+      status: status,
+      admin_user: AdminAuth.expected_username(),
+      nav: nav("skills"),
+      skills: skills,
+      filtered_count: filtered_count,
+      total_count: total_count,
+      active_skill_count: Agents.count_skills(enabled: true),
+      filter_form: skill_filter_form,
+      active_filters: active_filters,
+      skill_enabled_options: @skill_enabled_options
+    )
+  end
+
+  def new_skill(conn, _params) do
+    status = Status.summary()
+
+    render(conn, :new_skill,
+      status: status,
+      admin_user: AdminAuth.expected_username(),
+      nav: nav("skills")
+    )
+  end
+
+  def skill(conn, %{"id" => id}) do
+    status = Status.summary()
+
+    case Agents.get_skill(id) do
+      nil ->
+        conn
+        |> put_flash(:error, "Skill not found.")
+        |> redirect(to: ~p"/settings/skills")
+
+      skill ->
+        designations = Agents.list_skill_designations(skill.id)
+        assignable_agents = assignable_agents(skill, designations)
+
+        render(conn, :skill,
+          status: status,
+          admin_user: AdminAuth.expected_username(),
+          nav: nav("skills"),
+          skill: skill,
+          designations: designations,
+          assignable_agents: assignable_agents
+        )
+    end
   end
 
   def new_tool(conn, _params) do
@@ -318,6 +375,105 @@ defmodule SentientwaveAutomataWeb.PageController do
     |> redirect(to: ~p"/settings/tools")
   end
 
+  def create_skill(conn, %{"skill" => skill_params}) do
+    case Agents.create_skill(sanitize_skill_params(skill_params)) do
+      {:ok, skill} ->
+        conn
+        |> put_flash(:info, "Skill created.")
+        |> redirect(to: ~p"/settings/skills/#{skill.id}")
+
+      {:error, changeset} ->
+        conn
+        |> put_flash(:error, skill_error_message(changeset, "Could not create skill."))
+        |> redirect(to: ~p"/settings/skills/new")
+    end
+  end
+
+  def create_skill(conn, _params) do
+    conn
+    |> put_flash(:error, "Invalid skill payload.")
+    |> redirect(to: ~p"/settings/skills")
+  end
+
+  def update_skill(conn, %{"id" => id, "skill" => skill_params}) do
+    case Agents.get_skill(id) do
+      nil ->
+        conn
+        |> put_flash(:error, "Skill not found.")
+        |> redirect(to: ~p"/settings/skills")
+
+      skill ->
+        case Agents.update_skill(skill, sanitize_skill_params(skill_params)) do
+          {:ok, _skill} ->
+            conn
+            |> put_flash(:info, "Skill updated.")
+            |> redirect(to: ~p"/settings/skills/#{id}")
+
+          {:error, changeset} ->
+            conn
+            |> put_flash(:error, skill_error_message(changeset, "Could not update skill."))
+            |> redirect(to: ~p"/settings/skills/#{id}")
+        end
+    end
+  end
+
+  def update_skill(conn, _params) do
+    conn
+    |> put_flash(:error, "Invalid skill update payload.")
+    |> redirect(to: ~p"/settings/skills")
+  end
+
+  def designate_skill(conn, %{"id" => id, "designation" => %{"agent_id" => agent_id}}) do
+    with %{} <- Agents.get_skill(id),
+         true <- String.trim(agent_id) != "" do
+      case Agents.designate_skill(id, String.trim(agent_id), %{
+             metadata: %{"source" => "admin_ui"}
+           }) do
+        {:ok, _designation} ->
+          conn
+          |> put_flash(:info, "Skill designated to agent.")
+          |> redirect(to: ~p"/settings/skills/#{id}")
+
+        {:error, _reason} ->
+          conn
+          |> put_flash(:error, "Could not designate skill.")
+          |> redirect(to: ~p"/settings/skills/#{id}")
+      end
+    else
+      nil ->
+        conn
+        |> put_flash(:error, "Skill not found.")
+        |> redirect(to: ~p"/settings/skills")
+
+      false ->
+        conn
+        |> put_flash(:error, "Choose an agent first.")
+        |> redirect(to: ~p"/settings/skills/#{id}")
+    end
+  end
+
+  def designate_skill(conn, %{"id" => id}) do
+    conn
+    |> put_flash(:error, "Choose an agent first.")
+    |> redirect(to: ~p"/settings/skills/#{id}")
+  end
+
+  def rollback_skill_designation(conn, %{"id" => id, "designation_id" => designation_id}) do
+    case Agents.rollback_skill_designation(designation_id, %{
+           metadata: %{"rolled_back_from" => "admin_ui"}
+         }) do
+      {:ok, _designation} ->
+        conn
+        |> put_flash(:info, "Skill designation rolled back.")
+        |> redirect(to: ~p"/settings/skills/#{id}")
+
+      {:error, _reason} ->
+        conn
+        |> put_flash(:error, "Could not roll back skill designation.")
+        |> redirect(to: ~p"/settings/skills/#{id}")
+    end
+  end
+
   def update_tool(conn, %{"id" => id, "tool" => tool_params}) do
     attrs = sanitize_tool_params(tool_params)
     clear_api_token = truthy?(Map.get(tool_params, "clear_api_token", "false"))
@@ -396,6 +552,46 @@ defmodule SentientwaveAutomataWeb.PageController do
     )
   end
 
+  defp skill_filters_from_params(params) do
+    raw = Map.get(params, "filters", %{})
+
+    form_filters = %{
+      "q" => fetch_skill_filter(raw, "q"),
+      "enabled" => fetch_skill_filter(raw, "enabled")
+    }
+
+    query_filters =
+      []
+      |> maybe_put_skill_filter(:q, form_filters["q"])
+      |> maybe_put_skill_enabled_filter(form_filters["enabled"])
+
+    {query_filters, Phoenix.Component.to_form(form_filters, as: :filters)}
+  end
+
+  defp active_skill_filters(filters) do
+    labels = %{
+      q: "Search",
+      enabled: "Status"
+    }
+
+    filters
+    |> Enum.reduce([], fn {key, value}, acc ->
+      if value in [nil, ""] do
+        acc
+      else
+        rendered =
+          case {key, value} do
+            {:enabled, true} -> "Enabled"
+            {:enabled, false} -> "Disabled"
+            _ -> value
+          end
+
+        ["#{Map.get(labels, key, key)}: #{rendered}" | acc]
+      end
+    end)
+    |> Enum.reverse()
+  end
+
   defp trace_filters_from_params(params) do
     raw = Map.get(params, "filters", %{})
 
@@ -453,6 +649,7 @@ defmodule SentientwaveAutomataWeb.PageController do
         href: "/onboarding",
         active: active == "onboarding"
       },
+      %{id: "skills", label: "Skills", href: "/settings/skills", active: active == "skills"},
       %{id: "llm", label: "LLM Providers", href: "/settings/llm", active: active == "llm"},
       %{
         id: "llm_traces",
@@ -499,6 +696,22 @@ defmodule SentientwaveAutomataWeb.PageController do
     |> Map.update("enabled", true, &truthy?/1)
   end
 
+  defp sanitize_skill_params(params) do
+    summary = params |> Map.get("summary", "") |> to_string() |> String.trim()
+    tags = params |> Map.get("tags", "") |> normalize_tags()
+
+    %{
+      "name" => params |> Map.get("name", "Skill") |> to_string() |> String.trim(),
+      "slug" => params |> Map.get("slug", "") |> to_string() |> String.trim(),
+      "markdown_body" => params |> Map.get("markdown_body", "") |> to_string() |> String.trim(),
+      "enabled" => truthy?(Map.get(params, "enabled", "false")),
+      "metadata" => %{
+        "summary" => summary,
+        "tags" => tags
+      }
+    }
+  end
+
   defp normalize_provider(value) do
     value
     |> to_string()
@@ -539,5 +752,52 @@ defmodule SentientwaveAutomataWeb.PageController do
     |> Map.get(key, "")
     |> to_string()
     |> String.trim()
+  end
+
+  defp fetch_skill_filter(filters, key) do
+    filters
+    |> Map.get(key, "")
+    |> to_string()
+    |> String.trim()
+  end
+
+  defp maybe_put_skill_filter(filters, _key, ""), do: filters
+  defp maybe_put_skill_filter(filters, _key, nil), do: filters
+  defp maybe_put_skill_filter(filters, key, value), do: Keyword.put(filters, key, value)
+
+  defp maybe_put_skill_enabled_filter(filters, ""), do: filters
+  defp maybe_put_skill_enabled_filter(filters, "true"), do: Keyword.put(filters, :enabled, true)
+  defp maybe_put_skill_enabled_filter(filters, "false"), do: Keyword.put(filters, :enabled, false)
+  defp maybe_put_skill_enabled_filter(filters, _), do: filters
+
+  defp normalize_tags(value) do
+    value
+    |> to_string()
+    |> String.split([",", "\n"], trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp assignable_agents(_skill, designations) do
+    assigned_agent_ids =
+      designations
+      |> Enum.filter(&(&1.status == :active))
+      |> Enum.map(& &1.agent_id)
+      |> MapSet.new()
+
+    Agents.list_agents(kind: :agent, active_only: true)
+    |> Enum.reject(&MapSet.member?(assigned_agent_ids, &1.id))
+    |> Enum.sort_by(&{&1.display_name || "", &1.slug})
+  end
+
+  defp skill_error_message(changeset, fallback) do
+    case changeset.errors do
+      [{field, {message, _opts}} | _] ->
+        "#{field} #{message}"
+
+      _ ->
+        fallback
+    end
   end
 end

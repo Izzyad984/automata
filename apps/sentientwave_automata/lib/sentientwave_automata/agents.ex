@@ -8,24 +8,30 @@ defmodule SentientwaveAutomata.Agents do
   alias SentientwaveAutomata.Agents.{
     AgentWallet,
     AgentProfile,
+    LegacySkill,
     LLMTrace,
     Memory,
     Mention,
     Run,
     Skill,
+    SkillDesignation,
     ToolPermission
   }
 
   alias SentientwaveAutomata.Repo
 
-  @spec list_agents() :: [AgentProfile.t()]
-  def list_agents do
-    Repo.all(from a in AgentProfile, order_by: [asc: a.slug])
+  @spec list_agents(keyword()) :: [AgentProfile.t()]
+  def list_agents(opts \\ []) do
+    AgentProfile
+    |> maybe_filter_agent_status(opts)
+    |> maybe_filter_agent_kind(opts)
+    |> order_by([a], asc: a.slug)
+    |> Repo.all()
   end
 
   @spec list_active_agents() :: [AgentProfile.t()]
   def list_active_agents do
-    Repo.all(from a in AgentProfile, where: a.status == :active, order_by: [asc: a.slug])
+    list_agents(active_only: true)
   end
 
   @spec get_agent(binary()) :: AgentProfile.t() | nil
@@ -95,27 +101,149 @@ defmodule SentientwaveAutomata.Agents do
     |> Repo.insert_or_update()
   end
 
+  @spec list_skills(keyword()) :: [Skill.t()]
+  def list_skills(opts \\ []) do
+    Skill
+    |> preload([:designations])
+    |> maybe_filter_skill_enabled(opts)
+    |> maybe_search_skills(Keyword.get(opts, :q))
+    |> order_by([s], asc: s.name, asc: s.slug)
+    |> Repo.all()
+  end
+
+  @spec count_skills(keyword()) :: non_neg_integer()
+  def count_skills(opts \\ []) do
+    Skill
+    |> maybe_filter_skill_enabled(opts)
+    |> maybe_search_skills(Keyword.get(opts, :q))
+    |> Repo.aggregate(:count, :id)
+  end
+
+  @spec get_skill(binary()) :: Skill.t() | nil
+  def get_skill(id) when is_binary(id) do
+    Repo.one(
+      from s in Skill,
+        where: s.id == ^id,
+        preload: [designations: ^designation_preload_query()]
+    )
+  end
+
+  @spec get_skill_by_slug(String.t()) :: Skill.t() | nil
+  def get_skill_by_slug(slug) when is_binary(slug), do: Repo.get_by(Skill, slug: slug)
+
+  @spec create_skill(map()) :: {:ok, Skill.t()} | {:error, Ecto.Changeset.t()}
+  def create_skill(attrs) when is_map(attrs) do
+    attrs = normalize_skill_attrs(attrs)
+
+    %Skill{}
+    |> Skill.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @spec update_skill(Skill.t(), map()) :: {:ok, Skill.t()} | {:error, Ecto.Changeset.t()}
+  def update_skill(%Skill{} = skill, attrs) when is_map(attrs) do
+    attrs = normalize_skill_attrs(attrs)
+
+    skill
+    |> Skill.changeset(attrs)
+    |> Repo.update()
+  end
+
   @spec list_agent_skills(binary()) :: [Skill.t()]
   def list_agent_skills(agent_id) do
     Repo.all(
       from s in Skill,
-        where: s.agent_id == ^agent_id and s.enabled == true,
-        order_by: [asc: s.name, desc: s.version]
+        join: d in SkillDesignation,
+        on: d.skill_id == s.id,
+        where: d.agent_id == ^agent_id and d.status == :active and s.enabled == true,
+        order_by: [asc: s.name, asc: s.slug]
     )
+  end
+
+  @spec list_skill_designations(binary(), keyword()) :: [SkillDesignation.t()]
+  def list_skill_designations(skill_id, opts \\ []) when is_binary(skill_id) do
+    SkillDesignation
+    |> where([d], d.skill_id == ^skill_id)
+    |> maybe_filter_designation_status(opts)
+    |> preload([:agent, :skill])
+    |> order_by([d], desc: d.designated_at, desc: d.inserted_at)
+    |> Repo.all()
+  end
+
+  @spec count_skill_designations(binary(), keyword()) :: non_neg_integer()
+  def count_skill_designations(skill_id, opts \\ []) when is_binary(skill_id) do
+    SkillDesignation
+    |> where([d], d.skill_id == ^skill_id)
+    |> maybe_filter_designation_status(opts)
+    |> Repo.aggregate(:count, :id)
+  end
+
+  @spec designate_skill(binary(), binary(), map()) ::
+          {:ok, SkillDesignation.t()} | {:error, Ecto.Changeset.t() | term()}
+  def designate_skill(skill_id, agent_id, attrs \\ %{})
+      when is_binary(skill_id) and is_binary(agent_id) and is_map(attrs) do
+    case Repo.get_by(SkillDesignation, skill_id: skill_id, agent_id: agent_id, status: :active) do
+      %SkillDesignation{} = designation ->
+        {:ok, Repo.preload(designation, designation_preloads())}
+
+      nil ->
+        designation_attrs =
+          attrs
+          |> Map.put(:skill_id, skill_id)
+          |> Map.put(:agent_id, agent_id)
+          |> Map.put_new(:status, :active)
+          |> Map.put_new(:designated_at, DateTime.utc_now())
+
+        %SkillDesignation{}
+        |> SkillDesignation.changeset(designation_attrs)
+        |> Repo.insert()
+        |> case do
+          {:ok, designation} -> {:ok, Repo.preload(designation, designation_preloads())}
+          {:error, changeset} -> {:error, changeset}
+        end
+    end
+  end
+
+  @spec rollback_skill_designation(binary(), map()) ::
+          {:ok, SkillDesignation.t()} | {:error, Ecto.Changeset.t() | term()}
+  def rollback_skill_designation(designation_id, attrs \\ %{})
+      when is_binary(designation_id) and is_map(attrs) do
+    case Repo.get(SkillDesignation, designation_id) do
+      nil ->
+        {:error, :not_found}
+
+      %SkillDesignation{status: :rolled_back} = designation ->
+        {:ok, Repo.preload(designation, designation_preloads())}
+
+      %SkillDesignation{} = designation ->
+        designation
+        |> SkillDesignation.changeset(
+          attrs
+          |> Map.put(:status, :rolled_back)
+          |> Map.put_new(:rolled_back_at, DateTime.utc_now())
+        )
+        |> Repo.update()
+        |> case do
+          {:ok, designation} -> {:ok, Repo.preload(designation, designation_preloads())}
+          {:error, changeset} -> {:error, changeset}
+        end
+    end
   end
 
   @spec upsert_skill(map()) :: {:ok, Skill.t()} | {:error, Ecto.Changeset.t()}
   def upsert_skill(attrs) do
     agent_id = Map.get(attrs, :agent_id, Map.get(attrs, "agent_id"))
-    name = Map.get(attrs, :name, Map.get(attrs, "name"))
-    version = Map.get(attrs, :version, Map.get(attrs, "version", "v1"))
 
-    case Repo.get_by(Skill, agent_id: agent_id, name: name, version: version) do
-      nil -> %Skill{}
-      existing -> existing
+    skill_attrs =
+      attrs
+      |> normalize_skill_attrs()
+      |> Map.drop([:agent_id, "agent_id", :markdown_path, "markdown_path", :version, "version"])
+
+    with {:ok, skill} <- upsert_global_skill(skill_attrs),
+         :ok <- maybe_record_legacy_skill(attrs, skill.id),
+         {:ok, _designation} <- maybe_designate_imported_skill(skill, agent_id, attrs) do
+      {:ok, skill}
     end
-    |> Skill.changeset(attrs)
-    |> Repo.insert_or_update()
   end
 
   @spec set_tool_permission(map()) :: {:ok, ToolPermission.t()} | {:error, Ecto.Changeset.t()}
@@ -253,6 +381,68 @@ defmodule SentientwaveAutomata.Agents do
     |> Repo.insert_or_update()
   end
 
+  defp upsert_global_skill(attrs) do
+    slug = Map.get(attrs, :slug, Map.get(attrs, "slug", ""))
+
+    case Repo.get_by(Skill, slug: slug) do
+      nil -> %Skill{}
+      existing -> existing
+    end
+    |> Skill.changeset(attrs)
+    |> Repo.insert_or_update()
+  end
+
+  defp maybe_designate_imported_skill(skill, agent_id, attrs)
+       when is_binary(agent_id) and agent_id != "" do
+    metadata =
+      attrs
+      |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
+      |> normalize_map()
+      |> Map.put("source", "legacy_skill_import")
+
+    designate_skill(skill.id, agent_id, %{metadata: metadata})
+  end
+
+  defp maybe_designate_imported_skill(_skill, _agent_id, _attrs), do: {:ok, nil}
+
+  defp maybe_record_legacy_skill(attrs, skill_id) do
+    agent_id = Map.get(attrs, :agent_id, Map.get(attrs, "agent_id"))
+    markdown_body = Map.get(attrs, :markdown_body, Map.get(attrs, "markdown_body", ""))
+
+    if is_binary(agent_id) and agent_id != "" and is_binary(markdown_body) and markdown_body != "" do
+      legacy_attrs =
+        attrs
+        |> Map.put(:agent_id, agent_id)
+        |> Map.put(:name, Map.get(attrs, :name, Map.get(attrs, "name", "Skill")))
+        |> Map.put(:markdown_body, markdown_body)
+        |> Map.put(:version, Map.get(attrs, :version, Map.get(attrs, "version", "v1")))
+        |> Map.put(
+          :metadata,
+          attrs
+          |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
+          |> normalize_map()
+          |> Map.put("migrated_skill_id", skill_id)
+        )
+
+      case Repo.get_by(LegacySkill,
+             agent_id: agent_id,
+             name: Map.get(legacy_attrs, :name),
+             version: Map.get(legacy_attrs, :version)
+           ) do
+        nil -> %LegacySkill{}
+        existing -> existing
+      end
+      |> LegacySkill.changeset(legacy_attrs)
+      |> Repo.insert_or_update()
+      |> case do
+        {:ok, _legacy} -> :ok
+        {:error, _changeset} -> :ok
+      end
+    else
+      :ok
+    end
+  end
+
   defp apply_llm_trace_filters(query, filters) when is_map(filters) do
     query
     |> maybe_filter_llm_trace(:provider, fetch_filter(filters, :provider))
@@ -308,5 +498,83 @@ defmodule SentientwaveAutomata.Agents do
       value ->
         value
     end
+  end
+
+  defp maybe_filter_agent_status(query, opts) do
+    if Keyword.get(opts, :active_only, false) do
+      where(query, [a], a.status == :active)
+    else
+      query
+    end
+  end
+
+  defp maybe_filter_agent_kind(query, opts) do
+    case Keyword.get(opts, :kind) do
+      nil -> query
+      kind -> where(query, [a], a.kind == ^kind)
+    end
+  end
+
+  defp maybe_filter_skill_enabled(query, opts) do
+    case Keyword.get(opts, :enabled) do
+      nil -> query
+      value -> where(query, [s], s.enabled == ^value)
+    end
+  end
+
+  defp maybe_search_skills(query, nil), do: query
+  defp maybe_search_skills(query, ""), do: query
+
+  defp maybe_search_skills(query, value) do
+    like = "%" <> String.trim(to_string(value)) <> "%"
+
+    where(
+      query,
+      [s],
+      ilike(s.name, ^like) or
+        ilike(s.slug, ^like) or
+        ilike(s.markdown_body, ^like)
+    )
+  end
+
+  defp maybe_filter_designation_status(query, opts) do
+    case Keyword.get(opts, :status) do
+      nil ->
+        query
+
+      status when is_list(status) ->
+        where(query, [d], d.status in ^status)
+
+      status ->
+        where(query, [d], d.status == ^status)
+    end
+  end
+
+  defp normalize_skill_attrs(attrs) do
+    attrs
+    |> maybe_put_key(:slug, Map.get(attrs, :name, Map.get(attrs, "name")))
+    |> maybe_put_key(:enabled, true)
+    |> maybe_put_key(:metadata, %{})
+  end
+
+  defp maybe_put_key(map, _key, nil), do: map
+
+  defp maybe_put_key(map, key, value) do
+    cond do
+      Map.has_key?(map, key) -> map
+      Map.has_key?(map, Atom.to_string(key)) -> map
+      true -> Map.put(map, key, value)
+    end
+  end
+
+  defp normalize_map(value) when is_map(value), do: value
+  defp normalize_map(_), do: %{}
+
+  defp designation_preloads, do: [:agent, :skill]
+
+  defp designation_preload_query do
+    from d in SkillDesignation,
+      preload: [:agent],
+      order_by: [desc: d.designated_at, desc: d.inserted_at]
   end
 end

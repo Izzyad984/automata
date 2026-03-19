@@ -37,7 +37,11 @@
 
   <section class="sw-card">
     <h2 class="sw-card-title">Provider Configuration</h2>
-    <form action={~p"/settings/llm/providers/#{@provider.id}"} method="post" class="sw-form-grid mt-5">
+    <form
+      action={~p"/settings/llm/providers/#{@provider.id}"}
+      method="post"
+      class="sw-form-grid mt-5"
+    >
       <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
 
       <label class="sw-field">

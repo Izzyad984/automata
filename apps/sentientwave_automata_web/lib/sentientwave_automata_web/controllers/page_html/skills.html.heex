@@ -1,0 +1,120 @@
+<.admin_shell
+  flash={@flash}
+  title="Skill Catalog"
+  subtitle="Manage organization-wide skills and designate them to agents when they should shape behavior."
+  status={@status}
+  admin_user={@admin_user}
+  nav={@nav}
+>
+  <section class="sw-card">
+    <div class="sw-section-header">
+      <div>
+        <h2 class="sw-card-title">Catalog Overview</h2>
+        <p class="sw-card-copy">
+          Skills are stored in the database and can be designated or rolled back per agent.
+        </p>
+      </div>
+      <a href={~p"/settings/skills/new"} class="sw-btn sw-btn-primary">Add Skill</a>
+    </div>
+
+    <div class="sw-pill-list mt-4">
+      <span class="sw-pill">Visible: {@filtered_count}</span>
+      <span class="sw-pill">Total: {@total_count}</span>
+      <span class="sw-pill">Enabled: {@active_skill_count}</span>
+    </div>
+
+    <form action={~p"/settings/skills"} method="get" class="sw-form-grid mt-5">
+      <label class="sw-field sw-field-span">
+        <span>Search</span>
+        <input
+          name="filters[q]"
+          class="sw-input"
+          value={@filter_form[:q].value}
+          placeholder="Search by skill name, slug, or markdown"
+        />
+      </label>
+
+      <label class="sw-field">
+        <span>Status</span>
+        <select name="filters[enabled]" class="sw-select">
+          <%= for {label, value} <- @skill_enabled_options do %>
+            <option value={value} selected={@filter_form[:enabled].value == value}>
+              {label}
+            </option>
+          <% end %>
+        </select>
+      </label>
+
+      <div class="sw-actions sw-field-span">
+        <button type="submit" class="sw-btn sw-btn-primary">Apply Filters</button>
+        <a href={~p"/settings/skills"} class="sw-btn sw-btn-ghost">Reset</a>
+      </div>
+    </form>
+
+    <div :if={@active_filters != []} class="sw-pill-list mt-4">
+      <span :for={label <- @active_filters} class="sw-pill">{label}</span>
+    </div>
+  </section>
+
+  <section class="sw-card">
+    <div class="sw-section-header">
+      <div>
+        <h2 class="sw-card-title">Configured Skills</h2>
+        <p class="sw-card-copy">
+          Open a skill to edit its markdown and manage agent designations.
+        </p>
+      </div>
+    </div>
+
+    <div :if={@skills == []} class="sw-empty mt-5">
+      <h3>No skills yet</h3>
+      <p>Create your first organization skill to start shaping agent behavior consistently.</p>
+    </div>
+
+    <div :if={@skills != []} class="sw-table-wrap mt-5">
+      <table class="sw-data-table">
+        <thead>
+          <tr>
+            <th>Skill</th>
+            <th>Summary</th>
+            <th>Parsed Tools</th>
+            <th>Assignments</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr :for={skill <- @skills}>
+            <td>
+              <div class="sw-table-primary">{skill.name}</div>
+              <div class="sw-table-secondary">{skill.slug}</div>
+            </td>
+            <td>{skill_summary(skill)}</td>
+            <td>
+              <div class="sw-pill-list">
+                <span :for={tool <- skill_tools(skill)} class="sw-pill">{tool}</span>
+                <span :if={skill_tools(skill) == []} class="sw-pill">No parsed tools</span>
+              </div>
+            </td>
+            <td>{active_designation_count(skill)} active</td>
+            <td>
+              <span class={["sw-pill", skill.enabled && "is-ok"]}>
+                {if skill.enabled, do: "Enabled", else: "Disabled"}
+              </span>
+            </td>
+            <td>
+              <div class="sw-table-actions">
+                <a
+                  href={~p"/settings/skills/#{skill.id}"}
+                  class="sw-btn sw-btn-ghost sw-btn-small"
+                >
+                  Open
+                </a>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</.admin_shell>

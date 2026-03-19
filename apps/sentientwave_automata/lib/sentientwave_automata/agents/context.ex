@@ -5,6 +5,8 @@ defmodule SentientwaveAutomata.Agents.Runtime do
 
   import Ecto.Query, warn: false
 
+  alias SentientwaveAutomata.Agents
+
   alias SentientwaveAutomata.Agents.{
     AgentProfile,
     Memory,
@@ -56,23 +58,17 @@ defmodule SentientwaveAutomata.Agents.Runtime do
   end
 
   def create_skill(attrs) when is_map(attrs) do
-    %Skill{}
-    |> Skill.changeset(attrs)
-    |> Repo.insert()
+    Agents.create_skill(attrs)
   end
 
   def list_skills(agent_id, opts \\ []) when is_binary(agent_id) do
-    Skill
-    |> where([s], s.agent_id == ^agent_id)
-    |> maybe_skill_enabled_only(opts)
-    |> order_by([s], asc: s.name, desc: s.version)
-    |> Repo.all()
+    agent_id
+    |> Agents.list_agent_skills()
+    |> maybe_filter_enabled_skills(opts)
   end
 
   def update_skill(%Skill{} = skill, attrs) do
-    skill
-    |> Skill.changeset(attrs)
-    |> Repo.update()
+    Agents.update_skill(skill, attrs)
   end
 
   def create_or_update_tool_permission(attrs) when is_map(attrs) do
@@ -185,11 +181,11 @@ defmodule SentientwaveAutomata.Agents.Runtime do
     end
   end
 
-  defp maybe_skill_enabled_only(query, opts) do
+  defp maybe_filter_enabled_skills(skills, opts) do
     if Keyword.get(opts, :enabled_only, false) do
-      where(query, [s], s.enabled == true)
+      Enum.filter(skills, & &1.enabled)
     else
-      query
+      skills
     end
   end
 

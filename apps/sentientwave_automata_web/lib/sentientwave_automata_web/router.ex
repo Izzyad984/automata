@@ -39,6 +39,9 @@ defmodule SentientwaveAutomataWeb.Router do
     get "/", PageController, :home
     get "/dashboard", PageController, :dashboard
     get "/onboarding", PageController, :onboarding
+    get "/settings/skills", PageController, :skills
+    get "/settings/skills/new", PageController, :new_skill
+    get "/settings/skills/:id", PageController, :skill
     get "/settings/llm", PageController, :llm
     get "/settings/llm/providers/new", PageController, :new_llm_provider
     get "/settings/llm/providers/:id", PageController, :llm_provider
@@ -51,6 +54,14 @@ defmodule SentientwaveAutomataWeb.Router do
     post "/settings/llm/providers/:id", PageController, :update_llm_provider
     post "/settings/llm/providers/:id/default", PageController, :set_default_llm_provider
     delete "/settings/llm/providers/:id", PageController, :delete_llm_provider
+    post "/settings/skills", PageController, :create_skill
+    post "/settings/skills/:id", PageController, :update_skill
+    post "/settings/skills/:id/designations", PageController, :designate_skill
+
+    post "/settings/skills/:id/designations/:designation_id/rollback",
+         PageController,
+         :rollback_skill_designation
+
     post "/settings/tools", PageController, :create_tool
     post "/settings/tools/:id", PageController, :update_tool
     delete "/settings/tools/:id", PageController, :delete_tool

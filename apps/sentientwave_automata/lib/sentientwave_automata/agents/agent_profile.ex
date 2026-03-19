@@ -13,7 +13,15 @@ defmodule SentientwaveAutomata.Agents.AgentProfile do
     field :status, Ecto.Enum, values: [:active, :disabled], default: :active
     field :metadata, :map, default: %{}
 
-    has_many :skills, SentientwaveAutomata.Agents.Skill, foreign_key: :agent_id
+    has_many :legacy_skills, SentientwaveAutomata.Agents.LegacySkill, foreign_key: :agent_id
+
+    has_many :skill_designations, SentientwaveAutomata.Agents.SkillDesignation,
+      foreign_key: :agent_id
+
+    many_to_many :skills, SentientwaveAutomata.Agents.Skill,
+      join_through: SentientwaveAutomata.Agents.SkillDesignation,
+      join_keys: [agent_id: :id, skill_id: :id]
+
     has_many :memories, SentientwaveAutomata.Agents.Memory, foreign_key: :agent_id
     has_many :mentions, SentientwaveAutomata.Agents.Mention, foreign_key: :mentioned_agent_id
     has_many :runs, SentientwaveAutomata.Agents.Run, foreign_key: :agent_id

@@ -1,0 +1,79 @@
+<.admin_shell
+  flash={@flash}
+  title="Add Skill"
+  subtitle="Create a reusable organization skill in markdown, then designate it to agents as needed."
+  status={@status}
+  admin_user={@admin_user}
+  nav={@nav}
+>
+  <section class="sw-card">
+    <div class="sw-inline-actions">
+      <a href={~p"/settings/skills"} class="sw-btn sw-btn-ghost">Back to skill catalog</a>
+    </div>
+  </section>
+
+  <section class="sw-card">
+    <h2 class="sw-card-title">New Skill</h2>
+    <p class="sw-card-copy mt-4">
+      The markdown must include a <code># Skill:</code>
+      header. Parsed tool hints are extracted from bullet items.
+    </p>
+
+    <form action={~p"/settings/skills"} method="post" class="sw-form-grid mt-5">
+      <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+
+      <label class="sw-field">
+        <span>Display Name</span>
+        <input name="skill[name]" class="sw-input" placeholder="Triage Incoming Requests" />
+      </label>
+
+      <label class="sw-field">
+        <span>Slug (optional)</span>
+        <input name="skill[slug]" class="sw-input" placeholder="triage-incoming-requests" />
+      </label>
+
+      <label class="sw-field sw-field-span">
+        <span>Summary</span>
+        <input
+          name="skill[summary]"
+          class="sw-input"
+          placeholder="Short explanation for administrators browsing the catalog"
+        />
+      </label>
+
+      <label class="sw-field sw-field-span">
+        <span>Tags</span>
+        <input
+          name="skill[tags]"
+          class="sw-input"
+          placeholder="support, planning, triage"
+        />
+      </label>
+
+      <label class="sw-checkbox-row">
+        <input type="checkbox" name="skill[enabled]" value="1" checked />
+        <span>Enabled</span>
+      </label>
+
+      <label class="sw-field sw-field-span">
+        <span>Markdown</span>
+        <textarea
+          name="skill[markdown_body]"
+          class="sw-textarea"
+          rows="18"
+        ># Skill: Triage Incoming Requests
+
+You are responsible for structuring new requests before deeper work begins.
+
+- summarize the request
+- identify missing information
+- propose the next best action
+</textarea>
+      </label>
+
+      <div class="sw-field-span sw-actions">
+        <button type="submit" class="sw-btn sw-btn-primary">Create Skill</button>
+      </div>
+    </form>
+  </section>
+</.admin_shell>

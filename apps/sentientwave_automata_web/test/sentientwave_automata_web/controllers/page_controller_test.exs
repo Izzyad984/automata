@@ -37,6 +37,30 @@ defmodule SentientwaveAutomataWeb.PageControllerTest do
     assert html_response(conn, 200) =~ "LLM Provider Management"
   end
 
+  test "GET /settings/skills renders skill catalog when authenticated", %{conn: conn} do
+    assert {:ok, _skill} =
+             Agents.create_skill(%{
+               "name" => "Page Test Skill",
+               "markdown_body" => """
+               # Skill: Page Test Skill
+
+               Keep work organized.
+
+               - summarize
+               """,
+               "enabled" => true
+             })
+
+    conn =
+      conn
+      |> init_test_session(automata_admin_authenticated: true)
+      |> get(~p"/settings/skills")
+
+    body = html_response(conn, 200)
+    assert body =~ "Skill Catalog"
+    assert body =~ "Page Test Skill"
+  end
+
   test "GET /settings/tools renders tools page when authenticated", %{conn: conn} do
     conn =
       conn
@@ -44,6 +68,84 @@ defmodule SentientwaveAutomataWeb.PageControllerTest do
       |> get(~p"/settings/tools")
 
     assert html_response(conn, 200) =~ "Tool Management"
+  end
+
+  test "POST /settings/skills creates a new skill", %{conn: conn} do
+    conn =
+      conn
+      |> init_test_session(automata_admin_authenticated: true)
+      |> post(~p"/settings/skills", %{
+        "skill" => %{
+          "name" => "Created From Controller",
+          "summary" => "Controller summary",
+          "tags" => "ops, quality",
+          "enabled" => "1",
+          "markdown_body" => """
+          # Skill: Created From Controller
+
+          This is a controller-generated skill.
+
+          - summarize requests
+          """
+        }
+      })
+
+    assert redirected_to(conn) =~ "/settings/skills/"
+
+    [skill] = Agents.list_skills(q: "Created From Controller")
+    assert skill.metadata["summary"] == "Controller summary"
+    assert skill.metadata["tags"] == ["ops", "quality"]
+  end
+
+  test "skill detail shows designations and allows rollback flow", %{conn: conn} do
+    assert {:ok, agent} =
+             Agents.upsert_agent(%{
+               slug: "page-skill-agent",
+               kind: :agent,
+               display_name: "Page Skill Agent",
+               matrix_localpart: "page-skill-agent",
+               status: :active
+             })
+
+    assert {:ok, skill} =
+             Agents.create_skill(%{
+               "name" => "Detail Skill",
+               "markdown_body" => """
+               # Skill: Detail Skill
+
+               A detail view skill.
+
+               - route work
+               """,
+               "enabled" => true
+             })
+
+    conn =
+      conn
+      |> init_test_session(automata_admin_authenticated: true)
+      |> post(~p"/settings/skills/#{skill.id}/designations", %{
+        "designation" => %{"agent_id" => agent.id}
+      })
+
+    assert redirected_to(conn) == "/settings/skills/#{skill.id}"
+    [designation] = Agents.list_skill_designations(skill.id, status: :active)
+
+    detail_conn =
+      build_conn()
+      |> init_test_session(automata_admin_authenticated: true)
+      |> get(~p"/settings/skills/#{skill.id}")
+
+    detail_body = html_response(detail_conn, 200)
+    assert detail_body =~ "Designation History"
+    assert detail_body =~ "Page Skill Agent"
+
+    rollback_conn =
+      build_conn()
+      |> init_test_session(automata_admin_authenticated: true)
+      |> post(~p"/settings/skills/#{skill.id}/designations/#{designation.id}/rollback")
+
+    assert redirected_to(rollback_conn) == "/settings/skills/#{skill.id}"
+    assert [] == Agents.list_skill_designations(skill.id, status: :active)
   end
 
   test "GET /observability/llm-traces renders trace explorer when authenticated", %{conn: conn} do

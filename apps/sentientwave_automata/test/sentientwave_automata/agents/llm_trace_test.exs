@@ -162,4 +162,71 @@ defmodule SentientwaveAutomata.Agents.LLMTraceTest do
     assert get_in(trace.error_payload, ["reason"]) == "missing_api_key"
     assert trace.response_payload == nil
   end
+
+  test "includes designated skill markdown in traced provider requests" do
+    suffix = System.unique_integer([:positive])
+    agent_localpart = "skilled-agent-#{suffix}"
+
+    assert {:ok, agent} =
+             Agents.upsert_agent(%{
+               slug: agent_localpart,
+               kind: :agent,
+               display_name: "Skilled Agent",
+               matrix_localpart: agent_localpart,
+               status: :active
+             })
+
+    assert {:ok, skill} =
+             Agents.create_skill(%{
+               "name" => "Customer Support Voice",
+               "slug" => "customer-support-voice-#{suffix}",
+               "markdown_body" => """
+               # Skill: Customer Support Voice
+
+               Keep answers calm and practical.
+
+               - acknowledge the user need
+               - propose the next step
+               """,
+               "enabled" => true
+             })
+
+    assert {:ok, _designation} = Agents.designate_skill(skill.id, agent.id, %{})
+
+    assert {:ok, _provider} =
+             Settings.create_llm_provider_config(%{
+               "name" => "Local Skill Trace",
+               "slug" => "local-skill-trace-#{suffix}",
+               "provider" => "local",
+               "model" => "local-default",
+               "enabled" => true,
+               "is_default" => true
+             })
+
+    assert {:ok, _response} =
+             Client.generate_response(
+               agent_id: agent.id,
+               agent_slug: agent.slug,
+               user_input: "Please help me reply",
+               context_text: "Room context goes here",
+               trace_context: %{
+                 requested_by: "@mio:localhost",
+                 sender_mxid: "@mio:localhost",
+                 room_id: "!support:localhost",
+                 conversation_scope: "room"
+               }
+             )
+
+    [trace] = Agents.list_llm_traces(limit: 1)
+    messages = Map.get(trace.request_payload, "messages", [])
+
+    assert Enum.any?(messages, fn
+             %{"role" => "system", "content" => content} ->
+               String.contains?(content, "organization-approved skill instructions") and
+                 String.contains?(content, "# Skill: Customer Support Voice")
+
+             _ ->
+               false
+           end)
+  end
 end

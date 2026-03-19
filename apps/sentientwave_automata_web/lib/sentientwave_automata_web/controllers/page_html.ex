@@ -140,6 +140,54 @@ defmodule SentientwaveAutomataWeb.PageHTML do
     _ -> inspect(payload, pretty: true, limit: :infinity)
   end
 
+  def active_designation_count(skill) do
+    skill.designations
+    |> Enum.count(&(&1.status == :active))
+  end
+
+  def designation_status_class(:active), do: "is-ok"
+  def designation_status_class(:rolled_back), do: "is-neutral"
+  def designation_status_class(_), do: "is-neutral"
+
+  def skill_summary(skill) do
+    skill.metadata
+    |> Map.get("summary", "")
+    |> case do
+      value when is_binary(value) and value != "" -> value
+      _ -> "No summary added yet."
+    end
+  end
+
+  def skill_tags(skill) do
+    skill.metadata
+    |> Map.get("tags", [])
+    |> case do
+      tags when is_list(tags) -> tags
+      _ -> []
+    end
+  end
+
+  def skill_tools(skill) do
+    skill.metadata
+    |> Map.get("tools", [])
+    |> case do
+      tools when is_list(tools) -> tools
+      _ -> []
+    end
+  end
+
+  def designation_agent_name(designation) do
+    agent = designation.agent
+    display_name = agent && agent.display_name
+    slug = agent && agent.slug
+
+    cond do
+      present?(display_name) -> display_name
+      present?(slug) -> slug
+      true -> "Unknown agent"
+    end
+  end
+
   defp service_class(status) when is_binary(status) do
     cond do
       String.starts_with?(status, "ok") -> "is-ok"
