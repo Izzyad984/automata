@@ -48,6 +48,23 @@ defmodule SentientwaveAutomata.SettingsTest do
     assert provider.timeout_seconds == 600
   end
 
+  test "accepts cerebras provider configs" do
+    assert {:ok, provider} =
+             Settings.create_llm_provider_config(%{
+               "name" => "Cerebras Primary",
+               "slug" => "cerebras-primary",
+               "provider" => "cerebras",
+               "model" => "gpt-oss-120b",
+               "base_url" => "https://api.cerebras.ai/v1",
+               "api_token" => "cs_test_key",
+               "enabled" => true
+             })
+
+    assert provider.provider == "cerebras"
+    assert provider.model == "gpt-oss-120b"
+    assert provider.timeout_seconds == 600
+  end
+
   test "cannot delete last provider" do
     assert {:ok, provider} =
              Settings.create_llm_provider_config(%{
