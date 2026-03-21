@@ -50,6 +50,17 @@ defmodule SentientwaveAutomataWeb.PageControllerTest do
     assert body =~ "Anthropic"
   end
 
+  test "GET /settings/llm/providers/new includes Cerebras in provider options", %{conn: conn} do
+    conn =
+      conn
+      |> init_test_session(automata_admin_authenticated: true)
+      |> get(~p"/settings/llm/providers/new")
+
+    body = html_response(conn, 200)
+    assert body =~ "Add LLM Provider"
+    assert body =~ "Cerebras"
+  end
+
   test "GET /settings/skills renders skill catalog when authenticated", %{conn: conn} do
     assert {:ok, _skill} =
              Agents.create_skill(%{

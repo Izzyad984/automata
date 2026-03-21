@@ -70,6 +70,9 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
   defp provider_module("anthropic"),
     do: {:ok, SentientwaveAutomata.Agents.LLM.Providers.Anthropic}
 
+  defp provider_module("cerebras"),
+    do: {:ok, SentientwaveAutomata.Agents.LLM.Providers.Cerebras}
+
   defp provider_module("lm-studio"), do: {:ok, SentientwaveAutomata.Agents.LLM.Providers.LMStudio}
   defp provider_module("ollama"), do: {:ok, SentientwaveAutomata.Agents.LLM.Providers.Ollama}
   defp provider_module("local"), do: {:ok, SentientwaveAutomata.Agents.LLM.Providers.Local}

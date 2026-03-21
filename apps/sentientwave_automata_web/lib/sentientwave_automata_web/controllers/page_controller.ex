@@ -25,6 +25,7 @@ defmodule SentientwaveAutomataWeb.PageController do
     {"Local (Fallback)", "local"},
     {"OpenAI", "openai"},
     {"Anthropic", "anthropic"},
+    {"Cerebras", "cerebras"},
     {"OpenRouter", "openrouter"},
     {"LM Studio", "lm-studio"},
     {"Ollama", "ollama"}
