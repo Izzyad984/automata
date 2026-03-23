@@ -5,6 +5,7 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
 
   require Logger
   alias SentientwaveAutomata.Agents
+  alias SentientwaveAutomata.Agents.DeepResearch
   alias SentientwaveAutomata.Agents.LLM.TraceRecorder
   alias SentientwaveAutomata.Agents.Runtime
   alias SentientwaveAutomata.Agents.Tools.Executor
@@ -126,6 +127,124 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
       else
         _ -> generate_response_without_tools(opts)
       end
+    end
+  end
+
+  @spec deep_research_decision(keyword()) :: map()
+  def deep_research_decision(opts) when is_list(opts) do
+    user_input =
+      Keyword.get(opts, :user_input, "")
+      |> to_string()
+      |> String.trim()
+
+    available_tools =
+      Keyword.get(opts, :available_tools) ||
+        Executor.available_tools(Keyword.get(opts, :agent_id))
+
+    explicit? = explicit_deep_research?(opts)
+    fallback = DeepResearch.fallback_decision(user_input, available_tools)
+
+    cond do
+      not DeepResearch.should_consider?(user_input, available_tools) and not explicit? ->
+        fallback
+
+      true ->
+        %{
+          messages: base_messages,
+          provider_opts: provider_opts,
+          provider: provider
+        } = response_state(opts)
+
+        with {:ok, module} <- provider_module(provider),
+             {:ok, response} <-
+               traced_complete(
+                 module,
+                 base_messages ++
+                   [deep_research_decision_message(available_tools, explicit?)],
+                 provider_opts,
+                 "deep_research_decision",
+                 0
+               ),
+             {:ok, payload} <- extract_json_object(response) do
+          DeepResearch.normalize_decision(payload, user_input, available_tools)
+        else
+          _ -> fallback
+        end
+    end
+  end
+
+  @spec review_deep_research_round(keyword(), map()) :: {:ok, map()} | {:error, term()}
+  def review_deep_research_round(opts, round_payload)
+      when is_list(opts) and is_map(round_payload) do
+    %{
+      messages: base_messages,
+      provider_opts: provider_opts,
+      provider: provider
+    } = response_state(opts)
+
+    evidence = Map.get(round_payload, "evidence", [])
+    round_index = normalize_round_index(Map.get(round_payload, "round_index"))
+    max_rounds = normalize_max_rounds(Map.get(round_payload, "max_rounds"))
+    prior_summary = Map.get(round_payload, "prior_summary", "")
+
+    fallback =
+      DeepResearch.normalize_round_review(%{}, evidence, round_index, max_rounds)
+
+    with {:ok, module} <- provider_module(provider),
+         {:ok, response} <-
+           traced_complete(
+             module,
+             base_messages ++
+               [
+                 deep_research_review_message(
+                   evidence,
+                   prior_summary,
+                   round_index,
+                   max_rounds
+                 )
+               ],
+             provider_opts,
+             "deep_research_review",
+             round_index
+           ),
+         {:ok, payload} <- extract_json_object(response) do
+      {:ok, DeepResearch.normalize_round_review(payload, evidence, round_index, max_rounds)}
+    else
+      _ -> {:ok, fallback}
+    end
+  end
+
+  @spec synthesize_deep_research_response(keyword(), map()) ::
+          {:ok, String.t()} | {:error, term()}
+  def synthesize_deep_research_response(opts, research_payload)
+      when is_list(opts) and is_map(research_payload) do
+    %{
+      messages: base_messages,
+      provider_opts: provider_opts,
+      provider: provider
+    } = response_state(opts)
+
+    with {:ok, module} <- provider_module(provider),
+         {:ok, text} <-
+           traced_complete(
+             module,
+             base_messages ++ [deep_research_result_message(research_payload)],
+             provider_opts,
+             "deep_research_response",
+             0
+           ),
+         text when is_binary(text) and text != "" <- sanitize_text(text) do
+      {:ok, text}
+    else
+      {:error, reason} ->
+        Logger.warning(
+          "deep_research_response_failed provider=#{provider} reason=#{inspect(reason)}"
+        )
+
+        {:error, reason}
+
+      _ ->
+        {:error, :empty_llm_response}
     end
   end
 
@@ -283,6 +402,54 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
           "{\"tool_calls\":[{\"name\":\"tool_name\",\"arguments\":{}}]}. " <>
           "If no tools are needed, respond ONLY with {\"tool_calls\":[]}. " <>
           "Available tools: #{inspect(tool_specs(available_tools))}"
+    }
+  end
+
+  defp deep_research_decision_message(available_tools, explicit?) do
+    limits = DeepResearch.config()
+    tool_names = Enum.map(available_tools, &(Map.get(&1, :name) || Map.get(&1, "name")))
+
+    %{
+      "role" => "system",
+      "content" =>
+        "Decide whether this request requires deep research. " <>
+          "Deep research is appropriate when the user explicitly asks for it or when the task needs fresh external evidence, comparison, investigation, or multi-step synthesis. " <>
+          "Return ONLY JSON with keys enabled, reason, max_rounds, queries, and focus_areas. " <>
+          "Set max_rounds between 1 and #{limits["max_rounds"]}. " <>
+          "Keep queries to #{limits["max_queries_per_round"]} or fewer short web-search queries. " <>
+          "Available tools: #{inspect(tool_names)}. " <>
+          if(explicit?,
+            do: "The user explicitly requested deeper research. Bias toward enabled=true.",
+            else: ""
+          )
+    }
+  end
+
+  defp deep_research_review_message(evidence, prior_summary, round_index, max_rounds) do
+    evidence_text = DeepResearch.render_evidence_for_prompt(evidence)
+    limits = DeepResearch.config()
+
+    %{
+      "role" => "system",
+      "content" =>
+        "Review the current deep research evidence and decide whether more research is needed. " <>
+          "Return ONLY JSON with keys round_summary, key_findings, continue_research, follow_up_queries, and top_sources. " <>
+          "Keep follow_up_queries to #{limits["max_queries_per_round"]} or fewer. " <>
+          "Only continue when the evidence is still incomplete and the next round will materially improve the answer. " <>
+          "This is round #{round_index} of #{max_rounds}.\n\n" <>
+          "Prior summary:\n#{blank_if_empty(prior_summary)}\n\n" <>
+          "Current evidence:\n#{blank_if_empty(evidence_text)}"
+    }
+  end
+
+  defp deep_research_result_message(research_payload) do
+    %{
+      "role" => "system",
+      "content" =>
+        "Deep research findings are available for your final answer. " <>
+          "Write a plain-text response for the user. Do not use markdown bullets, JSON, or internal workflow language. " <>
+          "Use the gathered evidence, mention uncertainty when sources disagree, and prefer concise paragraphs.\n\n" <>
+          Jason.encode!(%{"deep_research" => research_payload})
     }
   end
 
@@ -490,6 +657,38 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
     case Regex.run(~r/\{[\s\S]*\}/u, text) do
       [json] -> Jason.decode(json)
       _ -> {:error, :no_json_object}
+    end
+  end
+
+  defp explicit_deep_research?(opts) do
+    Keyword.get(opts, :deep_research) in [true, "true", "1"] or
+      Keyword.get(opts, :research_mode) in [:deep, "deep", "deep_research"]
+  end
+
+  defp normalize_round_index(value) when is_integer(value) and value > 0, do: value
+
+  defp normalize_round_index(value) do
+    case Integer.parse(to_string(value || "")) do
+      {parsed, _} when parsed > 0 -> parsed
+      _ -> 1
+    end
+  end
+
+  defp normalize_max_rounds(value) when is_integer(value) and value > 0, do: value
+
+  defp normalize_max_rounds(value) do
+    limit = DeepResearch.config()["max_rounds"]
+
+    case Integer.parse(to_string(value || "")) do
+      {parsed, _} when parsed > 0 -> min(parsed, limit)
+      _ -> limit
+    end
+  end
+
+  defp blank_if_empty(value) do
+    case value |> to_string() |> String.trim() do
+      "" -> "No prior summary."
+      trimmed -> trimmed
     end
   end
 

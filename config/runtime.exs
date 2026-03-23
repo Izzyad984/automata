@@ -61,6 +61,12 @@ config :sentientwave_automata,
   temporal_workflow_task_queue: temporal_workflow_task_queue,
   temporal_activity_task_queue: temporal_activity_task_queue,
   temporal_worker_identity_prefix: temporal_worker_identity_prefix,
+  deep_research_max_rounds:
+    String.to_integer(System.get_env("AUTOMATA_DEEP_RESEARCH_MAX_ROUNDS", "2")),
+  deep_research_max_queries_per_round:
+    String.to_integer(System.get_env("AUTOMATA_DEEP_RESEARCH_MAX_QUERIES_PER_ROUND", "3")),
+  deep_research_results_per_query:
+    String.to_integer(System.get_env("AUTOMATA_DEEP_RESEARCH_RESULTS_PER_QUERY", "5")),
   embedding_dim: String.to_integer(System.get_env("AUTOMATA_EMBEDDING_DIM", "64")),
   agent_skills_path: System.get_env("AUTOMATA_SKILLS_PATH", "skills"),
   llm_provider: System.get_env("AUTOMATA_LLM_PROVIDER", "local"),
