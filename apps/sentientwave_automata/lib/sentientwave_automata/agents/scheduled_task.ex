@@ -15,6 +15,8 @@ defmodule SentientwaveAutomata.Agents.ScheduledTask do
           id: binary() | nil,
           agent_id: binary() | nil,
           agent: struct() | Ecto.Association.NotLoaded.t(),
+          workflow_id: String.t() | nil,
+          temporal_run_id: String.t() | nil,
           name: String.t() | nil,
           enabled: boolean(),
           task_type: task_type() | nil,
@@ -36,6 +38,8 @@ defmodule SentientwaveAutomata.Agents.ScheduledTask do
         }
 
   schema "agent_scheduled_tasks" do
+    field :workflow_id, :string
+    field :temporal_run_id, :string
     field :name, :string
     field :enabled, :boolean, default: true
     field :task_type, Ecto.Enum, values: @task_types
@@ -65,6 +69,8 @@ defmodule SentientwaveAutomata.Agents.ScheduledTask do
     task
     |> cast(attrs, [
       :agent_id,
+      :workflow_id,
+      :temporal_run_id,
       :name,
       :enabled,
       :task_type,

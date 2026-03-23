@@ -52,6 +52,8 @@ Security-related env vars (in `deploy/all-in-one/.env`):
 - `AUTOMATA_LLM_API_BASE` (optional provider base URL override)
 - `AUTOMATA_LLM_API_KEY` (provider API key when required)
 - `AUTOMATA_TEMPORAL_TASK_QUEUE` (Temporal task queue name for agent durable workflows)
+- `AUTOMATA_BACKGROUND_WORKERS_ENABLED` (`false` in all-in-one; local execution workers stay out of the Automata boot path)
+- `TEMPORAL_BOOT_TIMEOUT_SECONDS` (how long `start-automata.sh` waits for Temporal cluster health before starting Phoenix)
 - `PGVECTOR_REQUIRED` (`true` fails startup if pgvector is unavailable; default `false` for current Apple Silicon Podman compatibility)
 
 ## Manual Podman Run Commands
@@ -105,6 +107,7 @@ Web auth flow:
 - Admin UI supports configuring multiple LLM providers and selecting a default at runtime (`/settings/llm`).
 - Element Web defaults to `ELEMENT_DEFAULT_HOMESERVER_URL` and is reachable in LAN when `AIO_BIND_HOST=0.0.0.0`.
 - Temporal runs in local dev mode for single-container simplicity; production should use dedicated Temporal cluster deployment.
+- Automata startup waits for Temporal cluster health before serving traffic, and `deploy/all-in-one/bin/status.sh` reports both Temporal UI and runtime readiness.
 - PostgreSQL bootstrap only attempts pgvector extension when `PGVECTOR_REQUIRED=true`.
 
 ## Local Verification Commands

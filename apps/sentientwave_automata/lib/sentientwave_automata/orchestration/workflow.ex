@@ -1,18 +1,40 @@
 defmodule SentientwaveAutomata.Orchestration.Workflow do
-  @moduledoc """
-  Domain representation for an orchestrated collaboration run.
-  """
+  use Ecto.Schema
+  import Ecto.Changeset
 
-  @enforce_keys [:workflow_id, :run_id, :room_id, :objective, :status, :requested_by]
-  defstruct [:workflow_id, :run_id, :room_id, :objective, :status, :requested_by, :inserted_at]
+  @statuses [:running, :succeeded, :failed, :cancelled]
 
-  @type t :: %__MODULE__{
-          workflow_id: String.t(),
-          run_id: String.t(),
-          room_id: String.t(),
-          objective: String.t(),
-          status: atom(),
-          requested_by: String.t(),
-          inserted_at: DateTime.t()
-        }
+  @primary_key {:id, :binary_id, autogenerate: true}
+  schema "orchestration_workflows" do
+    field :workflow_id, :string
+    field :run_id, :string
+    field :status, Ecto.Enum, values: @statuses, default: :running
+    field :room_id, :string
+    field :objective, :string
+    field :requested_by, :string
+    field :result, :map, default: %{}
+    field :error, :map, default: %{}
+    field :metadata, :map, default: %{}
+
+    timestamps(type: :utc_datetime_usec)
+  end
+
+  def statuses, do: @statuses
+
+  def changeset(workflow, attrs) do
+    workflow
+    |> cast(attrs, [
+      :workflow_id,
+      :run_id,
+      :status,
+      :room_id,
+      :objective,
+      :requested_by,
+      :result,
+      :error,
+      :metadata
+    ])
+    |> validate_required([:workflow_id, :status, :room_id, :objective, :requested_by])
+    |> unique_constraint(:workflow_id)
+  end
 end

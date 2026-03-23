@@ -41,8 +41,10 @@ defmodule SentientwaveAutomata.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:postgrex, ">= 0.0.0"},
       {:pgvector, "~> 0.3.0"},
+      {:req, "~> 0.5"},
       {:jason, "~> 1.2"},
-      {:tzdata, "~> 1.1"}
+      {:tzdata, "~> 1.1"},
+      {:temporal_sdk, "~> 0.1.17"}
     ]
   end
 

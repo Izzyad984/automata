@@ -16,7 +16,6 @@ defmodule SentientwaveAutomata.Application do
       ] ++
         background_children() ++
         [
-          SentientwaveAutomata.Orchestration.Store,
           SentientwaveAutomata.Licensing.SeatManager
           # Start a worker by calling: SentientwaveAutomata.Worker, arg
           # {SentientwaveAutomata.Worker, arg}
@@ -30,8 +29,7 @@ defmodule SentientwaveAutomata.Application do
       [
         SentientwaveAutomata.Matrix.ReconciliationWorker,
         SentientwaveAutomata.Matrix.MentionPoller,
-        SentientwaveAutomata.Governance.ProposalResolutionWorker,
-        SentientwaveAutomata.Agents.ScheduledTaskWorker,
+        SentientwaveAutomata.Agents.ScheduledTaskReconciler,
         SentientwaveAutomata.Settings.BootstrapWorker
       ]
     else

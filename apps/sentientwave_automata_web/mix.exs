@@ -56,6 +56,7 @@ defmodule SentientwaveAutomataWeb.MixProject do
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:sentientwave_automata, in_umbrella: true},
+      {:sentientwave_automata_temporal, in_umbrella: true},
       {:jason, "~> 1.2"},
       {:bandit, "~> 1.5"}
     ]

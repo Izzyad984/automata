@@ -14,12 +14,31 @@ config :sentientwave_automata,
   ecto_repos: [SentientwaveAutomata.Repo],
   edition: :community,
   matrix_adapter: SentientwaveAutomata.Adapters.Matrix.Local,
-  temporal_adapter: SentientwaveAutomata.Adapters.Temporal.Local,
-  temporal_bridge_url: "http://localhost:8099",
+  temporal_adapter: SentientwaveAutomata.Adapters.Temporal.Runtime,
+  temporal_cluster: :automata,
+  temporal_namespace: "default",
+  temporal_workflow_task_queue: "automata-workflows",
+  temporal_activity_task_queue: "automata-activities",
+  temporal_worker_identity_prefix: "automata",
   embedding_provider: SentientwaveAutomata.Agents.Embedding.Local,
   embedding_dim: 64,
-  agent_skills_path: "skills",
-  temporal_agent_task_queue: "automata-agents"
+  agent_skills_path: "skills"
+
+config :temporal_sdk,
+  node: %{scope_config: [automata: 10]},
+  clusters: [
+    automata: [
+      client: %{
+        adapter:
+          {:temporal_sdk_grpc_adapter_gun_pool,
+           [endpoints: [{{127, 0, 0, 1}, 7233}], pool_size: 5]},
+        grpc_opts: [timeout: 2_000],
+        grpc_opts_longpoll: [timeout: 70_000]
+      },
+      workflows: [[task_queue: "automata-workflows"]],
+      activities: [[task_queue: "automata-activities"]]
+    ]
+  ]
 
 config :sentientwave_automata_web,
   ecto_repos: [SentientwaveAutomata.Repo],

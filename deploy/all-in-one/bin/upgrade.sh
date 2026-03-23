@@ -28,8 +28,9 @@ hot_upgrade_automata() {
 
   log "Hot-upgrading Automata in running container ${name} (Matrix stays online)"
 
-  # Clean accidental nested copies from previous runs, then sync source tree.
-  podman exec "${name}" sh -lc "rm -rf /app/apps/apps /app/config/config"
+  # Replace source directories instead of layering files on top. This keeps
+  # deleted migrations/templates from lingering inside the running container.
+  podman exec "${name}" sh -lc "rm -rf /app/apps /app/config && mkdir -p /app/apps /app/config"
   podman cp "${REPO_ROOT}/mix.exs" "${name}:/app/mix.exs"
   podman cp "${REPO_ROOT}/mix.lock" "${name}:/app/mix.lock"
   podman cp "${REPO_ROOT}/config/." "${name}:/app/config"

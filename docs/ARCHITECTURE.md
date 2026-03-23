@@ -20,7 +20,7 @@
 - `SentientwaveAutomata.Adapters.Temporal.*`
 - `SentientwaveAutomata.Agents.*`
 
-## Temporal Integration Plan
-- Current: `Local` adapter for dependency-free execution
-- Next: `HttpBridge` adapter to connect a Temporal bridge service
-- Future: full Temporal activity/workflow bridge with deterministic orchestration and signals
+## Temporal Integration
+- In-repo Elixir Temporal workers own agent runs, governance proposals, scheduled tasks, and generic conversation workflows
+- Phoenix and Matrix stay on the control plane: they persist requests, then start or signal Temporal workflows
+- Workflow summaries are stored durably in Postgres for API and admin UI introspection

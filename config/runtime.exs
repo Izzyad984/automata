@@ -16,10 +16,52 @@ matrix_adapter =
     _ -> SentientwaveAutomata.Adapters.Matrix.Local
   end
 
+parse_temporal_endpoint = fn address ->
+  case String.split(address, ":", parts: 2) do
+    [host, port] ->
+      {String.to_charlist(host), String.to_integer(port)}
+
+    [host] ->
+      {String.to_charlist(host), 7233}
+  end
+end
+
+temporal_address = System.get_env("TEMPORAL_ADDRESS", "127.0.0.1:7233")
+{temporal_host, temporal_port} = parse_temporal_endpoint.(temporal_address)
+temporal_namespace = System.get_env("TEMPORAL_NAMESPACE", "default")
+
+temporal_workflow_task_queue =
+  System.get_env("AUTOMATA_TEMPORAL_WORKFLOW_TASK_QUEUE", "automata-workflows")
+
+temporal_activity_task_queue =
+  System.get_env("AUTOMATA_TEMPORAL_ACTIVITY_TASK_QUEUE", "automata-activities")
+
+temporal_worker_identity_prefix =
+  System.get_env("AUTOMATA_TEMPORAL_WORKER_IDENTITY_PREFIX", "automata")
+
+config :temporal_sdk,
+  node: %{scope_config: [automata: 10]},
+  clusters: [
+    automata: [
+      client: %{
+        adapter:
+          {:temporal_sdk_grpc_adapter_gun_pool,
+           [endpoints: [{temporal_host, temporal_port}], pool_size: 5]},
+        grpc_opts: [timeout: 2_000],
+        grpc_opts_longpoll: [timeout: 70_000]
+      },
+      workflows: [[task_queue: temporal_workflow_task_queue]],
+      activities: [[task_queue: temporal_activity_task_queue]]
+    ]
+  ]
+
 config :sentientwave_automata,
-  temporal_bridge_url: System.get_env("TEMPORAL_BRIDGE_URL", "http://localhost:8099"),
+  temporal_cluster: :automata,
+  temporal_namespace: temporal_namespace,
+  temporal_workflow_task_queue: temporal_workflow_task_queue,
+  temporal_activity_task_queue: temporal_activity_task_queue,
+  temporal_worker_identity_prefix: temporal_worker_identity_prefix,
   embedding_dim: String.to_integer(System.get_env("AUTOMATA_EMBEDDING_DIM", "64")),
-  temporal_agent_task_queue: System.get_env("AUTOMATA_TEMPORAL_TASK_QUEUE", "automata-agents"),
   agent_skills_path: System.get_env("AUTOMATA_SKILLS_PATH", "skills"),
   llm_provider: System.get_env("AUTOMATA_LLM_PROVIDER", "local"),
   llm_model: System.get_env("AUTOMATA_LLM_MODEL", "local-default"),

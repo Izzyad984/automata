@@ -37,5 +37,11 @@ else
   printf '  - Temporal UI: NOT READY\n'
 fi
 
+if podman exec "$(container_name)" sh -lc 'temporal operator cluster health >/dev/null 2>&1'; then
+  printf '  - Temporal runtime: OK\n'
+else
+  printf '  - Temporal runtime: NOT READY\n'
+fi
+
 printf '\nConnection summary\n'
 podman exec "$(container_name)" sh -lc 'cat /data/connection-info.txt 2>/dev/null || echo "connection-info.txt not ready yet"'
