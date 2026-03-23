@@ -23,6 +23,8 @@ export AUTOMATA_LLM_API_KEY="${AUTOMATA_LLM_API_KEY:-}"
 export AUTOMATA_LLM_TIMEOUT_MS="${AUTOMATA_LLM_TIMEOUT_MS:-30000}"
 export AUTOMATA_LLM_CONNECT_TIMEOUT_MS="${AUTOMATA_LLM_CONNECT_TIMEOUT_MS:-3000}"
 export AUTOMATA_TEMPORAL_TASK_QUEUE="${AUTOMATA_TEMPORAL_TASK_QUEUE:-automata-agents}"
+export AUTOMATA_BACKGROUND_WORKERS_ENABLED="${AUTOMATA_BACKGROUND_WORKERS_ENABLED:-false}"
+export TEMPORAL_PORT="${TEMPORAL_PORT:-7233}"
 
 until PGPASSWORD="${APP_DB_PASSWORD}" pg_isready -h 127.0.0.1 -p "${POSTGRES_PORT}" -U "${APP_DB_USER}" -d "${APP_DB_NAME}" >/dev/null 2>&1; do
   echo "[automata] waiting for postgres at 127.0.0.1:${POSTGRES_PORT}"
@@ -40,5 +42,20 @@ fi
 
 mix ecto.create || true
 mix ecto.migrate
+
+temporal_boot_timeout="${TEMPORAL_BOOT_TIMEOUT_SECONDS:-120}"
+elapsed=0
+until temporal operator cluster health >/dev/null 2>&1; do
+  if [ "${elapsed}" -ge "${temporal_boot_timeout}" ]; then
+    echo "[automata] ERROR: Temporal cluster did not become ready within ${temporal_boot_timeout}s" >&2
+    exit 1
+  fi
+
+  echo "[automata] waiting for Temporal worker runtime at 127.0.0.1:${TEMPORAL_PORT}"
+  sleep 2
+  elapsed=$((elapsed + 2))
+done
+
+echo "[automata] Temporal worker runtime is ready"
 
 exec mix phx.server

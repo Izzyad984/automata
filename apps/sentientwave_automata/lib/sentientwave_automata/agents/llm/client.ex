@@ -14,49 +14,33 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
 
   @spec generate_response(keyword()) :: {:ok, String.t()} | {:error, term()}
   def generate_response(opts) do
-    effective = Settings.llm_provider_effective()
-    agent_slug = Keyword.get(opts, :agent_slug, "automata")
-    user_input = Keyword.get(opts, :user_input, "") |> to_string() |> String.trim()
-    provider = Keyword.get(opts, :provider, effective.provider)
-    model = Keyword.get(opts, :model, effective.model)
-    timeout_seconds = Keyword.get(opts, :timeout_seconds, effective.timeout_seconds || 600)
-    agent_id = Keyword.get(opts, :agent_id)
-    context_text = Keyword.get(opts, :context_text, "") |> to_string() |> String.trim()
-    trace_context = Keyword.get(opts, :trace_context, %{})
-    constitution_snapshot = Keyword.get(opts, :constitution_snapshot)
+    with {:ok, plan} <- plan_tool_calls(opts) do
+      case Map.get(plan, :tool_calls, []) do
+        [] ->
+          generate_response_without_tools(opts)
 
-    constitution_prompt_text =
-      Keyword.get(opts, :constitution_prompt_text) ||
-        Runtime.constitution_prompt_text(constitution_snapshot)
+        tool_calls ->
+          case execute_tool_calls(Keyword.get(opts, :agent_id), tool_calls) do
+            {:ok, tool_context} when tool_context != [] ->
+              synthesize_tool_response(opts, tool_context)
 
-    provider_opts =
-      [
-        model: model,
-        base_url: effective.base_url,
-        api_key: effective.api_token,
-        timeout_seconds: timeout_seconds,
-        agent_id: agent_id,
-        user_input: user_input,
-        room_id: Keyword.get(opts, :room_id)
-      ]
-      |> Keyword.put(:trace_context, trace_context)
-      |> Keyword.put(:provider, provider)
-      |> Keyword.put(:provider_config_id, effective.id)
+            _ ->
+              generate_response_without_tools(opts)
+          end
+      end
+    else
+      {:error, reason} ->
+        Logger.warning("llm_provider_error reason=#{inspect(reason)}")
+        {:error, reason}
+    end
+  end
 
-    messages =
-      [
-        %{
-          "role" => "system",
-          "content" => system_prompt(agent_slug)
-        }
-      ] ++
-        constitution_messages(constitution_prompt_text) ++
-        skill_messages(agent_id) ++
-        context_messages(context_text) ++
-        [%{"role" => "user", "content" => user_prompt(user_input)}]
+  @spec generate_response_without_tools(keyword()) :: {:ok, String.t()} | {:error, term()}
+  def generate_response_without_tools(opts) do
+    %{messages: messages, provider_opts: provider_opts, provider: provider} = response_state(opts)
 
     with {:ok, module} <- provider_module(provider),
-         {:ok, text} <- complete_with_optional_tools(module, messages, provider_opts),
+         {:ok, text} <- traced_complete(module, messages, provider_opts, "response", 0),
          text when is_binary(text) and text != "" <- sanitize_text(text) do
       {:ok, text}
     else
@@ -66,6 +50,82 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
 
       _ ->
         {:error, :empty_llm_response}
+    end
+  end
+
+  @spec plan_tool_calls(keyword()) ::
+          {:ok, %{tool_calls: [map()], available_tools: [map()]}} | {:error, term()}
+  def plan_tool_calls(opts) do
+    %{
+      messages: base_messages,
+      provider_opts: provider_opts,
+      provider: provider,
+      user_input: user_input,
+      agent_id: agent_id
+    } = state = response_state(opts)
+
+    available_tools = Executor.available_tools(agent_id)
+
+    cond do
+      available_tools == [] ->
+        {:ok, %{tool_calls: [], available_tools: []}}
+
+      true ->
+        with {:ok, module} <- provider_module(provider),
+             {:ok, tool_calls} <-
+               plan_with_heuristics_or_model(
+                 module,
+                 base_messages,
+                 user_input,
+                 available_tools,
+                 provider_opts
+               ) do
+          {:ok, %{tool_calls: tool_calls, available_tools: available_tools, state: state}}
+        end
+    end
+  end
+
+  @spec execute_tool_calls(binary() | nil, [map()]) :: {:ok, [map()]} | {:error, term()}
+  def execute_tool_calls(agent_id, tool_calls) when is_list(tool_calls) do
+    available_tools = Executor.available_tools(agent_id)
+    execute_tool_plan(tool_calls, available_tools)
+  end
+
+  @spec synthesize_tool_response(keyword(), [map()]) :: {:ok, String.t()} | {:error, term()}
+  def synthesize_tool_response(opts, tool_context) when is_list(tool_context) do
+    if tool_context == [] do
+      generate_response_without_tools(opts)
+    else
+      %{
+        messages: base_messages,
+        provider_opts: provider_opts,
+        provider: provider
+      } = response_state(opts)
+
+      tool_result_messages = [
+        %{
+          "role" => "system",
+          "content" =>
+            "Tool execution results are available for your reasoning. " <>
+              "Do not mention internal tool names, JSON payloads, IDs, or workflow internals in the user-facing response. " <>
+              "Summarize the outcome in plain language.\n\n#{Jason.encode!(%{"tool_results" => tool_context})}"
+        }
+      ]
+
+      with {:ok, module} <- provider_module(provider),
+           {:ok, text} <-
+             traced_complete(
+               module,
+               base_messages ++ tool_result_messages,
+               provider_opts,
+               "tool_response",
+               1
+             ),
+           text when is_binary(text) and text != "" <- sanitize_text(text) do
+        {:ok, text}
+      else
+        _ -> generate_response_without_tools(opts)
+      end
     end
   end
 
@@ -111,25 +171,16 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
 
   defp constitution_messages(_), do: []
 
-  defp complete_with_optional_tools(module, base_messages, opts) do
-    available_tools = Executor.available_tools(Keyword.get(opts, :agent_id))
-    user_input = Keyword.get(opts, :user_input, "") |> to_string() |> String.trim()
-
-    if available_tools == [] do
-      traced_complete(module, base_messages, opts, "response", 0)
+  defp plan_with_heuristics_or_model(module, base_messages, user_input, available_tools, opts) do
+    with {:ok, plan} <- heuristic_tool_plan(user_input, available_tools, opts),
+         true <- plan != [] do
+      {:ok, plan}
     else
-      with {:ok, plan} <- heuristic_tool_plan(user_input, available_tools, opts),
-           true <- plan != [],
-           {:ok, tool_context} <- execute_tool_plan(plan, available_tools),
-           true <- tool_context != [] do
-        {:ok, render_tool_outcome_reply(tool_context)}
-      else
-        false ->
-          run_model_tool_planner(module, base_messages, user_input, available_tools, opts)
+      false ->
+        run_model_tool_planner(module, base_messages, user_input, available_tools, opts)
 
-        {:error, _reason} ->
-          run_model_tool_planner(module, base_messages, user_input, available_tools, opts)
-      end
+      {:error, _reason} ->
+        run_model_tool_planner(module, base_messages, user_input, available_tools, opts)
     end
   end
 
@@ -143,24 +194,62 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
              0
            ),
          {:ok, plan} <-
-           parse_or_infer_tool_plan(tool_plan_text, user_input, available_tools, opts),
-         {:ok, tool_context} <- execute_tool_plan(plan, available_tools),
-         true <- tool_context != [] do
-      tool_result_messages = [
+           parse_or_infer_tool_plan(tool_plan_text, user_input, available_tools, opts) do
+      {:ok, plan}
+    else
+      _ -> {:ok, []}
+    end
+  end
+
+  defp response_state(opts) do
+    effective = Settings.llm_provider_effective()
+    agent_slug = Keyword.get(opts, :agent_slug, "automata")
+    user_input = Keyword.get(opts, :user_input, "") |> to_string() |> String.trim()
+    provider = Keyword.get(opts, :provider, effective.provider)
+    model = Keyword.get(opts, :model, effective.model)
+    timeout_seconds = Keyword.get(opts, :timeout_seconds, effective.timeout_seconds || 600)
+    agent_id = Keyword.get(opts, :agent_id)
+    context_text = Keyword.get(opts, :context_text, "") |> to_string() |> String.trim()
+    trace_context = Keyword.get(opts, :trace_context, %{})
+    constitution_snapshot = Keyword.get(opts, :constitution_snapshot)
+
+    constitution_prompt_text =
+      Keyword.get(opts, :constitution_prompt_text) ||
+        Runtime.constitution_prompt_text(constitution_snapshot)
+
+    provider_opts =
+      [
+        model: model,
+        base_url: effective.base_url,
+        api_key: effective.api_token,
+        timeout_seconds: timeout_seconds,
+        agent_id: agent_id,
+        user_input: user_input,
+        room_id: Keyword.get(opts, :room_id)
+      ]
+      |> Keyword.put(:trace_context, trace_context)
+      |> Keyword.put(:provider, provider)
+      |> Keyword.put(:provider_config_id, effective.id)
+
+    messages =
+      [
         %{
           "role" => "system",
-          "content" =>
-            "Tool execution results are available for your reasoning. " <>
-              "Do not mention internal tool names, JSON payloads, IDs, or workflow internals in the user-facing response. " <>
-              "Summarize the outcome in plain language.\n\n#{Jason.encode!(%{"tool_results" => tool_context})}"
+          "content" => system_prompt(agent_slug)
         }
-      ]
+      ] ++
+        constitution_messages(constitution_prompt_text) ++
+        skill_messages(agent_id) ++
+        context_messages(context_text) ++
+        [%{"role" => "user", "content" => user_prompt(user_input)}]
 
-      traced_complete(module, base_messages ++ tool_result_messages, opts, "tool_response", 1)
-    else
-      false -> traced_complete(module, base_messages, opts, "response_fallback", 1)
-      _ -> traced_complete(module, base_messages, opts, "response_fallback", 1)
-    end
+    %{
+      provider: provider,
+      provider_opts: provider_opts,
+      messages: messages,
+      user_input: user_input,
+      agent_id: agent_id
+    }
   end
 
   defp traced_complete(module, messages, opts, call_kind, sequence_index) do
@@ -360,41 +449,6 @@ defmodule SentientwaveAutomata.Agents.LLM.Client do
   end
 
   defp tool_available?(tools, name), do: Enum.any?(tools, &(&1.name == name))
-
-  defp render_tool_outcome_reply(tool_context) do
-    tool_context
-    |> Enum.map(&tool_outcome_line/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.join(" ")
-    |> case do
-      "" -> "Done."
-      text -> text
-    end
-  end
-
-  defp tool_outcome_line(%{
-         "name" => "system_directory_admin",
-         "result" => %{"result" => "agent_hired"}
-       }),
-       do: "Agent has been hired."
-
-  defp tool_outcome_line(%{
-         "name" => "system_directory_admin",
-         "result" => %{"result" => "agent_invited", "localpart" => localpart}
-       }),
-       do: "@#{localpart} has been invited to this room."
-
-  defp tool_outcome_line(%{
-         "name" => "system_directory_admin",
-         "result" => %{"result" => "human_upserted"}
-       }),
-       do: "User account has been created."
-
-  defp tool_outcome_line(%{"name" => "run_shell", "result" => %{"exit_code" => status}})
-       when is_integer(status) and status == 0,
-       do: "Command completed successfully."
-
-  defp tool_outcome_line(_), do: "Done."
 
   defp extract_name_localpart(input, anchor1, anchor2) do
     pattern =

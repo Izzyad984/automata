@@ -18,8 +18,8 @@ defmodule SentientwaveAutomata.Agents.Activities do
 
   @spec build_context(Run.t(), map()) :: {:ok, map()} | {:error, term()}
   def build_context(%Run{} = run, attrs) do
-    agent_id = run.agent_id || Map.get(attrs, :agent_id)
-    query = attrs |> Map.get(:input, %{}) |> Map.get(:body, "") |> sanitize_input()
+    agent_id = run.agent_id || fetch_value(attrs, "agent_id")
+    query = attrs |> fetch_map("input") |> fetch_value("body", "") |> sanitize_input()
 
     with {:ok, recent_items} <- fetch_recent_event_items(agent_id),
          {:ok, rag_items} <- fetch_rag_items(agent_id, query) do
@@ -88,8 +88,8 @@ defmodule SentientwaveAutomata.Agents.Activities do
 
   @spec generate_response(Run.t(), map(), map()) :: {:ok, String.t()} | {:error, term()}
   def generate_response(%Run{} = run, attrs, context) do
-    body = attrs |> Map.get(:input, %{}) |> Map.get(:body, "") |> sanitize_input()
-    agent_slug = attrs |> Map.get(:metadata, %{}) |> Map.get(:agent_slug, "automata")
+    body = attrs |> fetch_map("input") |> fetch_value("body", "") |> sanitize_input()
+    agent_slug = attrs |> fetch_map("metadata") |> fetch_value("agent_slug", "automata")
     constitution_snapshot = constitution_snapshot_reference(run, attrs)
 
     trace_context =
@@ -101,7 +101,7 @@ defmodule SentientwaveAutomata.Agents.Activities do
            agent_slug: agent_slug,
            user_input: body,
            context_text: Map.get(context, :context_text, ""),
-           room_id: Map.get(attrs, :room_id, ""),
+           room_id: fetch_value(attrs, "room_id", ""),
            constitution_snapshot: constitution_snapshot,
            trace_context: trace_context
          ) do
@@ -125,45 +125,39 @@ defmodule SentientwaveAutomata.Agents.Activities do
   end
 
   defp trace_context(%Run{} = run, attrs) do
-    input = Map.get(attrs, :input, %{})
-    metadata = Map.get(attrs, :metadata, %{})
+    input = fetch_map(attrs, "input")
+    metadata = fetch_map(attrs, "metadata")
     run_metadata = Map.get(run, :metadata, %{})
     constitution_snapshot = constitution_snapshot_reference(run, attrs)
 
     %{
       run_id: run.id,
-      mention_id: Map.get(attrs, :mention_id) || Map.get(input, :mention_id),
-      requested_by: Map.get(attrs, :requested_by),
-      sender_mxid: Map.get(input, :sender_mxid) || Map.get(attrs, :requested_by),
-      room_id: Map.get(attrs, :room_id, ""),
+      mention_id: fetch_value(attrs, "mention_id") || fetch_value(input, "mention_id"),
+      requested_by: fetch_value(attrs, "requested_by"),
+      sender_mxid: fetch_value(input, "sender_mxid") || fetch_value(attrs, "requested_by"),
+      room_id: fetch_value(attrs, "room_id", ""),
       conversation_scope:
-        Map.get(attrs, :conversation_scope) ||
-          Map.get(input, :conversation_scope) ||
-          Map.get(metadata, "conversation_scope") ||
-          Map.get(metadata, :conversation_scope) ||
+        fetch_value(attrs, "conversation_scope") ||
+          fetch_value(input, "conversation_scope") ||
+          fetch_value(metadata, "conversation_scope") ||
           infer_conversation_scope(attrs),
       remote_ip:
-        Map.get(attrs, :remote_ip) ||
-          Map.get(input, :remote_ip) ||
-          Map.get(metadata, "remote_ip") ||
-          Map.get(metadata, :remote_ip),
+        fetch_value(attrs, "remote_ip") ||
+          fetch_value(input, "remote_ip") ||
+          fetch_value(metadata, "remote_ip"),
       constitution_snapshot_id:
-        Map.get(attrs, :constitution_snapshot_id) ||
-          Map.get(attrs, "constitution_snapshot_id") ||
-          Map.get(run_metadata, "constitution_snapshot_id") ||
-          Map.get(run_metadata, :constitution_snapshot_id) ||
+        fetch_value(attrs, "constitution_snapshot_id") ||
+          fetch_value(run_metadata, "constitution_snapshot_id") ||
           Map.get(constitution_snapshot, :id),
       constitution_version:
-        Map.get(attrs, :constitution_version) ||
-          Map.get(attrs, "constitution_version") ||
-          Map.get(run_metadata, "constitution_version") ||
-          Map.get(run_metadata, :constitution_version) ||
+        fetch_value(attrs, "constitution_version") ||
+          fetch_value(run_metadata, "constitution_version") ||
           Map.get(constitution_snapshot, :version)
     }
   end
 
   defp infer_conversation_scope(attrs) do
-    if Map.get(attrs, :room_id, "") |> to_string() |> String.trim() != "" do
+    if fetch_value(attrs, "room_id", "") |> to_string() |> String.trim() != "" do
       "room"
     else
       "unknown"
@@ -172,7 +166,7 @@ defmodule SentientwaveAutomata.Agents.Activities do
 
   @spec post_response(Run.t(), map(), String.t()) :: :ok | {:error, term()}
   def post_response(%Run{} = run, attrs, response) when is_binary(response) do
-    room_id = Map.get(attrs, :room_id, "")
+    room_id = fetch_value(attrs, "room_id", "")
     plain_response = to_plain_text(response)
 
     if String.trim(to_string(room_id)) == "" do
@@ -188,7 +182,7 @@ defmodule SentientwaveAutomata.Agents.Activities do
 
   @spec persist_memory(Run.t(), map(), map(), String.t()) :: :ok
   def persist_memory(%Run{} = run, attrs, context, response) do
-    body = attrs |> Map.get(:input, %{}) |> Map.get(:body, "") |> sanitize_input()
+    body = attrs |> fetch_map("input") |> fetch_value("body", "") |> sanitize_input()
     plain_response = to_plain_text(response)
 
     memory_content =
@@ -351,8 +345,10 @@ defmodule SentientwaveAutomata.Agents.Activities do
   end
 
   defp constitution_snapshot_reference(%Run{} = run, attrs) do
-    attrs
-    |> Map.take([:constitution_snapshot_id, :constitution_version])
+    %{
+      "constitution_snapshot_id" => fetch_value(attrs, "constitution_snapshot_id"),
+      "constitution_version" => fetch_value(attrs, "constitution_version")
+    }
     |> Map.merge(
       Map.take(Map.get(run, :metadata, %{}), ["constitution_snapshot_id", "constitution_version"])
     )
@@ -410,5 +406,34 @@ defmodule SentientwaveAutomata.Agents.Activities do
     |> String.to_integer()
   rescue
     _ -> 6
+  end
+
+  defp fetch_map(map, key) do
+    case fetch_value(map, key) do
+      value when is_map(value) -> value
+      _ -> %{}
+    end
+  end
+
+  defp fetch_value(map, key, default \\ nil) when is_map(map) do
+    atom_key =
+      case key do
+        "agent_id" -> :agent_id
+        "input" -> :input
+        "body" -> :body
+        "metadata" -> :metadata
+        "agent_slug" -> :agent_slug
+        "room_id" -> :room_id
+        "mention_id" -> :mention_id
+        "requested_by" -> :requested_by
+        "sender_mxid" -> :sender_mxid
+        "conversation_scope" -> :conversation_scope
+        "remote_ip" -> :remote_ip
+        "constitution_snapshot_id" -> :constitution_snapshot_id
+        "constitution_version" -> :constitution_version
+        _ -> nil
+      end
+
+    Map.get(map, key, atom_key && Map.get(map, atom_key, default)) || default
   end
 end

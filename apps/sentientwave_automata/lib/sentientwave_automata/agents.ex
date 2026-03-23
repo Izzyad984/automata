@@ -334,6 +334,27 @@ defmodule SentientwaveAutomata.Agents do
     |> Repo.update()
   end
 
+  @spec mark_orphaned_runs_failed() :: non_neg_integer()
+  def mark_orphaned_runs_failed do
+    {count, _rows} =
+      from(r in Run,
+        where: r.status == :running,
+        where: fragment("coalesce((?->>'temporal_source'), '')", r.metadata) != ^"temporal_sdk"
+      )
+      |> Repo.update_all(
+        set: [
+          status: :failed,
+          error: %{
+            "reason" => "Run abandoned during Temporal-only workflow cutover.",
+            "kind" => "temporal_cutover_orphan"
+          },
+          updated_at: DateTime.utc_now()
+        ]
+      )
+
+    count
+  end
+
   @spec create_memory(map()) :: {:ok, Memory.t()} | {:error, Ecto.Changeset.t()}
   def create_memory(attrs) do
     %Memory{}
@@ -434,8 +455,13 @@ defmodule SentientwaveAutomata.Agents do
     |> put_initial_next_run()
     |> Repo.insert()
     |> case do
-      {:ok, task} -> {:ok, Repo.preload(task, [:agent])}
-      {:error, changeset} -> {:error, changeset}
+      {:ok, task} ->
+        task = Repo.preload(task, [:agent])
+        notify_scheduled_task_reconciler()
+        {:ok, task}
+
+      {:error, changeset} ->
+        {:error, changeset}
     end
   end
 
@@ -449,16 +475,25 @@ defmodule SentientwaveAutomata.Agents do
     |> put_initial_next_run()
     |> Repo.update()
     |> case do
-      {:ok, updated_task} -> {:ok, Repo.preload(updated_task, [:agent])}
-      {:error, changeset} -> {:error, changeset}
+      {:ok, updated_task} ->
+        updated_task = Repo.preload(updated_task, [:agent])
+        notify_scheduled_task_reconciler()
+        {:ok, updated_task}
+
+      {:error, changeset} ->
+        {:error, changeset}
     end
   end
 
   @spec delete_scheduled_task(ScheduledTask.t()) :: :ok | {:error, term()}
   def delete_scheduled_task(%ScheduledTask{} = task) do
     case Repo.delete(task) do
-      {:ok, _task} -> :ok
-      {:error, reason} -> {:error, reason}
+      {:ok, _task} ->
+        notify_scheduled_task_reconciler()
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -486,6 +521,26 @@ defmodule SentientwaveAutomata.Agents do
         preload: [:agent],
         order_by: [asc: t.next_run_at, asc: t.inserted_at],
         limit: ^limit
+    )
+  end
+
+  @spec list_enabled_scheduled_tasks() :: [ScheduledTask.t()]
+  def list_enabled_scheduled_tasks do
+    Repo.all(
+      from t in ScheduledTask,
+        where: t.enabled == true,
+        preload: [:agent],
+        order_by: [asc: t.next_run_at, asc: t.inserted_at]
+    )
+  end
+
+  @spec list_temporal_managed_scheduled_tasks() :: [ScheduledTask.t()]
+  def list_temporal_managed_scheduled_tasks do
+    Repo.all(
+      from t in ScheduledTask,
+        where: not is_nil(t.workflow_id),
+        preload: [:agent],
+        order_by: [asc: t.updated_at]
     )
   end
 
@@ -518,6 +573,14 @@ defmodule SentientwaveAutomata.Agents do
       last_run_at: DateTime.utc_now(),
       last_outcome: outcome
     })
+    |> Repo.update()
+  end
+
+  @spec update_scheduled_task_temporal_state(ScheduledTask.t(), map()) ::
+          {:ok, ScheduledTask.t()} | {:error, Ecto.Changeset.t()}
+  def update_scheduled_task_temporal_state(%ScheduledTask{} = task, attrs) when is_map(attrs) do
+    task
+    |> ScheduledTask.changeset(attrs)
     |> Repo.update()
   end
 
@@ -620,6 +683,13 @@ defmodule SentientwaveAutomata.Agents do
         ilike(fragment("coalesce(cast(? as text), '')", t.response_payload), ^like) or
         ilike(fragment("coalesce(cast(? as text), '')", t.error_payload), ^like)
     )
+  end
+
+  defp notify_scheduled_task_reconciler do
+    case Process.whereis(SentientwaveAutomata.Agents.ScheduledTaskReconciler) do
+      nil -> :ok
+      pid -> send(pid, :reconcile)
+    end
   end
 
   defp fetch_filter(filters, key) do
