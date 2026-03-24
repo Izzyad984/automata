@@ -4,7 +4,7 @@
 
 Automata is a Matrix-native workspace and admin dashboard for teams that want people and AI assistants to handle real work together. Conversations happen in chat. Setup, control, and visibility happen in the web dashboard. Long-running work keeps going until it finishes.
 
-Instead of scattering prompts across separate tools, Automata gives an organization one place to coordinate assistants, tools, identities, activity logs, and task history.
+Instead of scattering prompts across separate tools, Automata gives an organization one place to coordinate assistants, tools, identities, activity logs, and task history. It is a new operational layer for a world where humans are no longer the only actors carrying work forward and making decisions.
 
 ![SentientWave Automata](images/automata_element.png)
 
