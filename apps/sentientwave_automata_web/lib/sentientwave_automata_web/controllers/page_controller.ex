@@ -24,6 +24,7 @@ defmodule SentientwaveAutomataWeb.PageController do
   @provider_options [
     {"Local (Fallback)", "local"},
     {"OpenAI", "openai"},
+    {"Google Gemini", "gemini"},
     {"Anthropic", "anthropic"},
     {"Cerebras", "cerebras"},
     {"OpenRouter", "openrouter"},
@@ -1428,6 +1429,13 @@ defmodule SentientwaveAutomataWeb.PageController do
   end
 
   defp sanitize_llm_params(params) do
+    provider =
+      params
+      |> Map.get("provider", "local")
+      |> normalize_provider()
+
+    defaults = Settings.llm_provider_defaults(provider)
+
     params
     |> Map.take([
       "name",
@@ -1442,9 +1450,9 @@ defmodule SentientwaveAutomataWeb.PageController do
     ])
     |> Map.update("name", "Provider", &String.trim(to_string(&1)))
     |> Map.update("slug", "", &String.trim(to_string(&1)))
-    |> Map.update("provider", "local", &normalize_provider/1)
-    |> Map.update("model", "local-default", &String.trim(to_string(&1)))
-    |> Map.update("base_url", "", &String.trim(to_string(&1)))
+    |> Map.put("provider", provider)
+    |> Map.update("model", defaults.model, &default_provider_field(&1, defaults.model))
+    |> Map.update("base_url", defaults.base_url, &default_provider_field(&1, defaults.base_url))
     |> Map.update("api_token", "", &String.trim(to_string(&1)))
     |> Map.update("enabled", true, &truthy?/1)
     |> Map.update("is_default", false, &truthy?/1)
@@ -1548,6 +1556,13 @@ defmodule SentientwaveAutomataWeb.PageController do
     |> to_string()
     |> String.trim()
     |> String.downcase()
+  end
+
+  defp default_provider_field(value, fallback) do
+    case value |> to_string() |> String.trim() do
+      "" -> fallback
+      trimmed -> trimmed
+    end
   end
 
   defp truthy?(value) when value in [true, "true", "1", 1, "on"], do: true

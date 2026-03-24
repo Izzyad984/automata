@@ -65,6 +65,23 @@ defmodule SentientwaveAutomata.SettingsTest do
     assert provider.timeout_seconds == 600
   end
 
+  test "accepts gemini provider configs" do
+    assert {:ok, provider} =
+             Settings.create_llm_provider_config(%{
+               "name" => "Gemini Primary",
+               "slug" => "gemini-primary",
+               "provider" => "gemini",
+               "model" => "gemini-2.5-flash",
+               "base_url" => "https://generativelanguage.googleapis.com/v1beta",
+               "api_token" => "gemini_test_key",
+               "enabled" => true
+             })
+
+    assert provider.provider == "gemini"
+    assert provider.model == "gemini-2.5-flash"
+    assert provider.timeout_seconds == 600
+  end
+
   test "cannot delete last provider" do
     assert {:ok, provider} =
              Settings.create_llm_provider_config(%{
