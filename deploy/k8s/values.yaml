@@ -74,10 +74,17 @@ ingress:
         - automata.local
 
 tailscale:
-  # Enable Tailscale Ingress for remote access
+  # Enable Tailscale Ingress custom resource generation
   enabled: true
   className: "tailscale"
   annotations: {}
+
+tailscale-operator:
+  # Enable installing the tailscale operator as a subchart
+  enabled: false
+  oauth:
+    clientId: ""
+    clientSecret: ""
 
 env:
   # Typically set via secrets in production, but defined here for template generation

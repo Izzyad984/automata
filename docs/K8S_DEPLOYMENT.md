@@ -51,28 +51,23 @@ spec:
 ```
 Apply it to your cluster: `kubectl apply -f cluster-issuer.yaml`
 
-If you want Tailscale remote access, install the operator:
-```bash
-helm repo add tailscale https://pkgs.tailscale.com/helmcharts
-helm repo update
-helm upgrade --install tailscale-operator tailscale/tailscale-operator \
-  --namespace tailscale \
-  --create-namespace \
-  --set-string oauth.clientId="<YOUR_OAUTH_CLIENT_ID>" \
-  --set-string oauth.clientSecret="<YOUR_OAUTH_CLIENT_SECRET>"
-```
+If you want Tailscale remote access, you do not need to install the operator separately. It can be installed alongside Automata automatically as a Helm dependency. You just need to provide your OAuth credentials during the upgrade step.
 
 ## Deploying Automata
 
 Ensure your DNS A records point to your k3s node's public IP. Then deploy the application using the local chart in the `deploy/k8s` directory:
 
 ```bash
+helm dependency update ./deploy/k8s
 helm upgrade --install automata ./deploy/k8s \
   --set env.PHX_HOST=app.yourdomain.com \
   --set ingress.hosts[0].host=app.yourdomain.com \
   --set env.SECRET_KEY_BASE=YOUR_PHOENIX_SECRET \
   --set env.DATABASE_URL=postgres://user:pass@host:5432/db \
-  --set tailscale.enabled=true # Set to false if not using tailscale
+  --set tailscale.enabled=true \
+  --set tailscale-operator.enabled=true \
+  --set tailscale-operator.oauth.clientId="YOUR_OAUTH_CLIENT_ID" \
+  --set tailscale-operator.oauth.clientSecret="YOUR_OAUTH_CLIENT_SECRET"
 ```
 
 ### Upgrading the Application Version
